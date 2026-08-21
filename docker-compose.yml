@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: spice-db
+    environment:
+      POSTGRES_USER: spice
+      POSTGRES_PASSWORD: spice
+      POSTGRES_DB: spice_oms
+    ports: ['5432:5432']
+    # postgres:18+ expects the mount at the parent directory, not /data.
+    volumes: [spice_pgdata:/var/lib/postgresql]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U spice -d spice_oms']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: spice-redis
+    ports: ['6379:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  spice_pgdata:
