@@ -71,36 +71,55 @@ as the second: nothing here is allowed to take the app down by being absent.
 
 ```mermaid
 flowchart LR
-    subgraph Browser
-        UI["React SPA<br/>Orders · Kitchen · Dashboard"]
+    B["Browser<br/>React SPA"]
+
+    subgraph Edge["One origin"]
+        WEB["Caddy<br/>static files, and /api to the API"]
     end
 
     subgraph Server["API — stateless, runs as N copies"]
         API["Hono<br/>auth → validate → route"]
-        WORKER["Worker<br/>drains the outbox"]
+        WORK["Worker<br/>drains the outbox"]
     end
 
-    subgraph Data
-        PG[("PostgreSQL<br/>the source of truth")]
-        REDIS[("Redis<br/>optional")]
+    subgraph State["State"]
+        PG[("PostgreSQL<br/>orders · events · outbox")]
+        REDIS[("Redis<br/>cache + fan-out")]
     end
 
-    UI -- "HTTPS + JWT" --> API
-    API -. "server-sent events" .-> UI
+    AI["Groq<br/>aggregates only"]
+    CUST["Customer<br/>log · webhook · WhatsApp"]
+
+    B -- "HTTPS + JWT" --> WEB
+    WEB --> API
+    API -. "server-sent events" .-> WEB
+    WEB -. " " .-> B
+
     API --> PG
-    WORKER --> PG
-    API <-- "cache + fan-out" --> REDIS
-    WORKER -- "console or webhook" --> OUT["Customer"]
+    API <--> REDIS
+    API -. "optional" .-> AI
+
+    WORK -- "claims a batch" --> PG
+    WORK --> CUST
 
     style REDIS stroke-dasharray: 5 5
+    style AI stroke-dasharray: 5 5
 ```
 
-- **Postgres holds everything that matters.** Nothing else is trusted.
+- **Postgres holds everything that matters.** Orders, the event log and the
+  outbox all live there, so a crash can never leave two of them disagreeing.
 - **The API keeps no state**, so it can run as several copies behind a load
   balancer.
-- **Redis is optional.** It caches dashboard figures and carries events between
-  API copies. Without it the app still works — one warning at startup, and live
-  updates reach only the screens connected to the same copy.
+- **The browser talks to one origin.** Caddy serves the built site and passes
+  `/api` through to the API, so there is no CORS to configure and the event
+  stream is not a cross-site request.
+- **The worker is not a queue.** It claims a batch from the outbox table with
+  `FOR UPDATE SKIP LOCKED`, so a second copy steps over rows the first is
+  holding rather than waiting behind them or sending twice.
+- **The dashed parts are optional.** Without Redis: no cache, and live updates
+  reach only the screens on the same copy. Without an AI key: every figure
+  still renders and the written panel hides itself. Each logs one warning at
+  startup and nothing else.
 
 ---
 
