@@ -7,6 +7,7 @@ import { customers, orderItems, orders, orderStatusEvents } from '../db/schema.t
 import { assertCanSetStatus, requireRole, type AuthVariables } from '../lib/auth.ts'
 import { ApiError, fromPostgresError } from '../lib/errors.ts'
 import { attachItems, loadOrderDetail } from '../lib/orders.query.ts'
+import { emitOrderUpdated } from '../lib/events.ts'
 import { recordEvent, transitionOrder, type Tx } from '../lib/orders.tx.ts'
 import {
   orderStatusSchema,
@@ -201,7 +202,10 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
       return order!.id
     })
 
-    return c.json({ data: await loadOrderDetail(orderId) }, 201)
+    const order = await loadOrderDetail(orderId)
+    emitOrderUpdated({ orderId, orderNumber: order.orderNumber, status: order.status })
+
+    return c.json({ data: order }, 201)
   })
 
   /** PATCH /orders/{order_id}/status — advance the order through its lifecycle. */

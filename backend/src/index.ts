@@ -6,9 +6,11 @@ import { requestId, type RequestIdVariables } from 'hono/request-id'
 
 import { config } from './config.ts'
 import { pool } from './db/client.ts'
+import { closeEventBus } from './lib/events.ts'
 import { requireAuth, type AuthVariables } from './lib/auth.ts'
 import { errorHandler, notFoundHandler } from './lib/errors.ts'
 import { authRoutes } from './routes/auth.ts'
+import { eventRoutes } from './routes/events.ts'
 import { staffRoutes } from './routes/staff.ts'
 import { customerRoutes } from './routes/customers.ts'
 import { orderRoutes } from './routes/orders.ts'
@@ -30,6 +32,10 @@ app.get('/health', async (c) => {
 
 // /health and /auth/login are the only routes reachable without a token.
 app.route('/auth', authRoutes)
+
+// The stream authenticates with a short-lived ticket in the query string,
+// because EventSource cannot send an Authorization header.
+app.route('/events', eventRoutes)
 
 app.use('/customers/*', requireAuth)
 app.use('/orders/*', requireAuth)
@@ -57,7 +63,7 @@ function shutdown(signal: string) {
   console.log(`${signal} received — draining connections`)
 
   server.close(() => {
-    void pool.end().then(() => process.exit(0))
+    void Promise.all([pool.end(), closeEventBus()]).then(() => process.exit(0))
   })
 
   // If a request hangs, do not block the deploy for ever. unref() so this

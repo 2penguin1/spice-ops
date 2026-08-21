@@ -69,6 +69,8 @@ async function staffFromToken(token: string): Promise<Staff> {
   try {
     const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] })
 
+    if (payload.scope === 'events') throw new Error('stream ticket used as a session token')
+
     return {
       id: String(payload.sub),
       name: String(payload.name),
@@ -76,6 +78,37 @@ async function staffFromToken(token: string): Promise<Staff> {
     }
   } catch {
     throw new ApiError('UNAUTHORIZED', 'Your session has expired. Sign in again.')
+  }
+}
+
+/**
+ * A 60 second token scoped to the event stream only.
+ *
+ * EventSource cannot set headers, so the token has to travel in the URL, where
+ * it lands in access logs. Scoping and expiry make that acceptable: this
+ * ticket opens a stream that carries only order ids, and it is worthless a
+ * minute later.
+ */
+export function issueStreamTicket(member: Staff): Promise<string> {
+  return new SignJWT({ role: member.role, name: member.name, scope: 'events' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(member.id)
+    .setIssuedAt()
+    .setExpirationTime('60s')
+    .sign(secret)
+}
+
+export async function verifyStreamTicket(ticket: string): Promise<Staff> {
+  try {
+    const { payload } = await jwtVerify(ticket, secret, { algorithms: ['HS256'] })
+
+    // A session token must not open a stream, and a ticket must not open
+    // anything else.
+    if (payload.scope !== 'events') throw new Error('wrong scope')
+
+    return { id: String(payload.sub), name: String(payload.name), role: payload.role as Role }
+  } catch {
+    throw new ApiError('UNAUTHORIZED', 'That stream ticket is not valid. Reconnecting.')
   }
 }
 

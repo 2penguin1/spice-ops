@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { db } from '../db/client.ts'
 import { orders, orderStatusEvents } from '../db/schema.ts'
 import { ApiError } from './errors.ts'
+import { emitOrderUpdated } from './events.ts'
 import { loadOrderDetail } from './orders.query.ts'
 import type { OrderDetail } from './serialize.ts'
 import { assertTransition, isNoop, type OrderStatus } from './status.ts'
@@ -67,5 +68,11 @@ export async function transitionOrder(
     await recordEvent(tx, { orderId, from: current.status, to, staffId })
   })
 
-  return loadOrderDetail(orderId)
+  const order = await loadOrderDetail(orderId)
+
+  // After the commit, never inside it: announcing a change that then rolled
+  // back would tell every screen something untrue.
+  emitOrderUpdated({ orderId, orderNumber: order.orderNumber, status: order.status })
+
+  return order
 }
