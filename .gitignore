@@ -8,6 +8,17 @@ dist/
 # Local machine overrides (port conflicts, personal settings)
 docker-compose.override.yml
 .tmp-body
+.env.prodtest
+
+# Terraform: state holds the generated secrets in plain text, and .terraform
+# is a few hundred MB of downloaded providers.
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfvars
+!infra/*.tfvars.example
+infra/tfplan
 .playwright-mcp/
 *.png
 

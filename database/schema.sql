@@ -125,3 +125,7 @@ ALTER TABLE "notifications" ADD CONSTRAINT "notifications_order_id_orders_id_fk"
 CREATE INDEX "notifications_pending_idx" ON "notifications" USING btree ("created_at") WHERE "notifications"."status" = 'PENDING';
 
 CREATE INDEX "notifications_order_id_idx" ON "notifications" USING btree ("order_id");
+
+-- ─── 0004_aspiring_brood.sql ─────────────────────────────────────
+
+ALTER TABLE "notifications" ADD COLUMN "claimed_at" timestamp with time zone;

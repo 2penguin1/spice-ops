@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and edit. That file is gitignored.
+
+# Nearest region to whoever will be using it.
+region = "ap-south-1"
+
+# Free tier for the first 12 months of a new account.
+instance_type = "t3.micro"
+
+# The name of a key pair you already made in EC2 → Key Pairs.
+# Leave empty and the instance is created with no way to SSH in.
+ssh_key_name = ""
+
+# Your own address, so port 22 is not open to everyone.
+# Find it with: curl -s https://checkip.amazonaws.com
+ssh_cidr = "0.0.0.0/0"
+
+# Optional. Without it the dashboard shows every figure and hides the
+# written summary.
+groq_api_key = ""

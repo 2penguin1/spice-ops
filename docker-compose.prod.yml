@@ -1,0 +1,73 @@
+# The whole system on one machine: database, cache, API and web server.
+#
+# Only nginx is published. Postgres and Redis talk to the API over the compose
+# network and are unreachable from outside the host, so neither needs a
+# password strong enough to survive the open internet — though one is set
+# anyway, because "not reachable today" is not a security model.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: spice
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: spice_oms
+    # Postgres runs everything in this directory the first time it initialises
+    # an empty data directory, and never again. That is exactly the lifecycle a
+    # schema and a demo seed want, so production needs no migration tool.
+    volumes:
+      - spice_pgdata:/var/lib/postgresql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U spice -d spice_oms']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Persistence off: everything in here is a cache or a message in flight,
+    # and both are rebuilt from Postgres after a restart.
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://spice:${POSTGRES_PASSWORD}@db:5432/spice_oms
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      NODE_ENV: production
+      RESTAURANT_TZ: Asia/Kolkata
+      # Same origin behind nginx, so this is only ever the fallback path.
+      CORS_ORIGIN: ${PUBLIC_URL:-http://localhost}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      NOTIFY_DRIVER: ${NOTIFY_DRIVER:-console}
+      GREENAPI_URL: ${GREENAPI_URL:-}
+      GREENAPI_ID: ${GREENAPI_ID:-}
+      GREENAPI_TOKEN: ${GREENAPI_TOKEN:-}
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api
+    restart: unless-stopped
+    ports: ['80:80']
+    depends_on: [api]
+
+volumes:
+  spice_pgdata:
