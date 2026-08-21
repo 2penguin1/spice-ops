@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { db } from '../db/client.ts'
 import { orders, orderStatusEvents } from '../db/schema.ts'
 import { ApiError } from './errors.ts'
+import { invalidateAnalytics } from './cache.ts'
 import { emitOrderUpdated } from './events.ts'
 import { loadOrderDetail } from './orders.query.ts'
 import type { OrderDetail } from './serialize.ts'
@@ -73,6 +74,7 @@ export async function transitionOrder(
   // After the commit, never inside it: announcing a change that then rolled
   // back would tell every screen something untrue.
   emitOrderUpdated({ orderId, orderNumber: order.orderNumber, status: order.status })
+  void invalidateAnalytics()
 
   return order
 }

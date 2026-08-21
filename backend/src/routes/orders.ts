@@ -7,6 +7,7 @@ import { customers, orderItems, orders, orderStatusEvents } from '../db/schema.t
 import { assertCanSetStatus, requireRole, type AuthVariables } from '../lib/auth.ts'
 import { ApiError, fromPostgresError } from '../lib/errors.ts'
 import { attachItems, loadOrderDetail } from '../lib/orders.query.ts'
+import { invalidateAnalytics } from '../lib/cache.ts'
 import { emitOrderUpdated } from '../lib/events.ts'
 import { recordEvent, transitionOrder, type Tx } from '../lib/orders.tx.ts'
 import {
@@ -204,6 +205,7 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
 
     const order = await loadOrderDetail(orderId)
     emitOrderUpdated({ orderId, orderNumber: order.orderNumber, status: order.status })
+    void invalidateAnalytics()
 
     return c.json({ data: order }, 201)
   })

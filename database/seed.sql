@@ -15,6 +15,7 @@ INSERT INTO staff (name, email, password_hash, role) VALUES
   ('Asha Menon', 'admin@spice.test', 'scrypt$9068ec9df45aa123d9902a10b2b4a406$ca7e18d5d198bda8fb7f86c2e1a79b8d36322a2ffd4b1ea1cc345e899a1dce5c923ab5f70ea406d98053645d16d85cbd67acdf2a10181db3d0e1266da91a3ddb', 'ADMIN'),
   ('Vikram Rao', 'manager@spice.test', 'scrypt$f32c9382575b475d191e6b9c9d7996fb$91c4ef9b79bab42547389a68fa0fbf126554aad66e01bb1963dcf70e1b34384fcb74f604c4dad5f93c73b48edbc5723be7056fdffb95adb2fd7152df31b8c808', 'MANAGER'),
   ('Sunil Kapoor', 'cook@spice.test', 'scrypt$7cd05363683a965729254c1d7ef5f0dc$1f8199cd26e7c22c98887c3df37fd438d796dd2982b3d58f7d56f1d4e986fa45f6f150e702042139a38560cd885829fc4c0ce4c5699e9d3fdc84a2e80f5a1ef1', 'KITCHEN'),
+  ('Rekha Iyer', 'cook2@spice.test', 'scrypt$d30108014cb651c6f4a226c25e997851$5b802d50bd1fabf2152ac2c7d616ba12d8331df4f8197a83cd67ce117de1586decf7b09792346b891ce3bce3340fce73af0f79f164835129b5b7b7b01cd54fa6', 'KITCHEN'),
   ('Nisha Patel', 'server@spice.test', 'scrypt$a8bfa321fc5b5c822991e3c450d938e3$eb3dafe3ff2d9343c51f0fd19118d236f903d10d9594a476bada2e0f539ae8441d856491a7bd13357ce02e44a9fdbc6cfbfbe948c4b79b7ac4f482a11a182b60', 'SERVICE');
 
 INSERT INTO customers (name, email, phone) VALUES
@@ -37,7 +38,14 @@ WITH numbered_customers AS (
 planned AS (
   SELECT
     g,
-    now() - make_interval(hours => g * 8) AS placed_at,
+    -- Lunch and dinner, three orders a day, so "when orders arrive" shows a
+    -- service pattern rather than an artefact of the generator.
+    date_trunc('day', now())
+      - make_interval(days => (g / 3)::int)
+      + make_interval(
+          hours => (ARRAY[12, 13, 14, 19, 20, 21])[(g % 6) + 1],
+          mins  => (g * 17) % 60
+        ) AS placed_at,
     CASE
       WHEN g % 15 = 0 THEN 'CANCELLED'
       WHEN g <= 3     THEN 'CONFIRMED'
@@ -122,5 +130,29 @@ FROM (
   SELECT order_id, max(created_at) AS at FROM order_status_events GROUP BY order_id
 ) latest
 WHERE latest.order_id = o.id;
+
+-- Attribute the seeded history to staff, so the dashboard has something real
+-- to show. Two cooks alternate by order, which is what makes a per-cook
+-- comparison meaningful rather than a single row.
+WITH cooks AS (
+  SELECT id, row_number() OVER (ORDER BY email) - 1 AS n FROM staff WHERE role = 'KITCHEN'
+),
+numbered AS (
+  SELECT id AS order_id, row_number() OVER (ORDER BY created_at) AS rn FROM orders
+)
+UPDATE order_status_events e
+SET staff_id = cooks.id
+FROM numbered
+JOIN cooks ON cooks.n = numbered.rn % (SELECT count(*) FROM staff WHERE role = 'KITCHEN')
+WHERE e.order_id = numbered.order_id
+  AND e.to_status IN ('PREPARING', 'READY');
+
+UPDATE order_status_events e
+SET staff_id = (SELECT id FROM staff WHERE role = 'SERVICE' LIMIT 1)
+WHERE e.to_status = 'COMPLETED';
+
+UPDATE order_status_events e
+SET staff_id = (SELECT id FROM staff WHERE role = 'MANAGER' LIMIT 1)
+WHERE e.to_status = 'CANCELLED';
 
 COMMIT;

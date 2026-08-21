@@ -6,10 +6,12 @@ import { requestId, type RequestIdVariables } from 'hono/request-id'
 
 import { config } from './config.ts'
 import { pool } from './db/client.ts'
+import { closeCache } from './lib/cache.ts'
 import { closeEventBus } from './lib/events.ts'
 import { requireAuth, type AuthVariables } from './lib/auth.ts'
 import { errorHandler, notFoundHandler } from './lib/errors.ts'
 import { authRoutes } from './routes/auth.ts'
+import { analyticsRoutes } from './routes/analytics.ts'
 import { eventRoutes } from './routes/events.ts'
 import { staffRoutes } from './routes/staff.ts'
 import { customerRoutes } from './routes/customers.ts'
@@ -40,10 +42,12 @@ app.route('/events', eventRoutes)
 app.use('/customers/*', requireAuth)
 app.use('/orders/*', requireAuth)
 app.use('/staff/*', requireAuth)
+app.use('/analytics/*', requireAuth)
 
 app.route('/customers', customerRoutes)
 app.route('/orders', orderRoutes)
 app.route('/staff', staffRoutes)
+app.route('/analytics', analyticsRoutes)
 
 app.notFound(notFoundHandler)
 app.onError(errorHandler)
@@ -63,7 +67,7 @@ function shutdown(signal: string) {
   console.log(`${signal} received — draining connections`)
 
   server.close(() => {
-    void Promise.all([pool.end(), closeEventBus()]).then(() => process.exit(0))
+    void Promise.all([pool.end(), closeEventBus(), closeCache()]).then(() => process.exit(0))
   })
 
   // If a request hangs, do not block the deploy for ever. unref() so this
