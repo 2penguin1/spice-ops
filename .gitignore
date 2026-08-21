@@ -10,3 +10,9 @@ docker-compose.override.yml
 .tmp-body
 .playwright-mcp/
 *.png
+
+# Kept locally, not published: build notes, agent conventions, and the
+# employer-supplied brief.
+CLAUDE.md
+docs/plan.md
+docs/*.docx
