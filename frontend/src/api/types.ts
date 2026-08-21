@@ -42,6 +42,14 @@ export type OrderDetail = {
   items: OrderItem[]
 }
 
+/** One entry in an order's status history. `fromStatus` is null for its creation. */
+export type OrderEvent = {
+  id: string
+  fromStatus: OrderStatus | null
+  toStatus: OrderStatus
+  createdAt: string
+}
+
 export type Pagination = { page: number; size: number; total: number; totalPages: number }
 
 export type Page<T> = { data: T[]; meta: { pagination: Pagination } }

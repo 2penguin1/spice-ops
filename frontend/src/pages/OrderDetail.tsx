@@ -5,6 +5,7 @@ import { ApiError, api } from '../api/client'
 import type { OrderDetail as Order, OrderStatus } from '../api/types'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { StatusBadge } from '../components/StatusBadge'
+import { Timeline } from '../components/Timeline'
 import { useApi } from '../hooks/useApi'
 import { formatAge, formatMoney, formatWhen } from '../lib/format'
 import { MENU } from '../lib/menu'
@@ -165,6 +166,8 @@ export function OrderDetail() {
           </div>
 
           <AddItem busy={busy} onAdd={(item) => run(() => api.orders.addItem(current.id, item))} />
+
+          <Timeline orderId={current.id} status={current.status} />
         </div>
       </div>
     </div>

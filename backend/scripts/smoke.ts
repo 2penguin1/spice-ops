@@ -271,9 +271,38 @@ async function lifecycle(orderId: string) {
     'RESOURCE_NOT_FOUND',
   )
 
+  // The history must record what happened, in order, with each move's origin.
+  const history = await call('GET', `/orders/${orderId}/timeline`)
+  expect('timeline responds 200', history, 200)
+  const events = history.body?.data ?? []
+  check('first event is the order being placed', events[0]?.toStatus === 'CONFIRMED')
+  check('the first event has no previous status', events[0]?.fromStatus === null)
+  check('the move to PREPARING was recorded once', events.filter((e: any) => e.toStatus === 'PREPARING').length === 1)
+  check(
+    'each event records where it came from',
+    events.slice(1).every((e: any) => e.fromStatus !== null),
+  )
+  check(
+    'events are in chronological order',
+    events.every((e: any, i: number) => i === 0 || e.createdAt >= events[i - 1].createdAt),
+  )
+  expect(
+    'timeline of an unknown order is 404',
+    await call('GET', '/orders/11111111-1111-4111-8111-111111111111/timeline'),
+    404,
+    'RESOURCE_NOT_FOUND',
+  )
+
   expect('PREPARING to READY', await to('READY'), 200)
   expect('READY to COMPLETED', await to('COMPLETED'), 200)
   expect('COMPLETED is terminal', await to('CANCELLED'), 409, 'INVALID_STATUS_TRANSITION')
+
+  const final = (await call('GET', `/orders/${orderId}/timeline`)).body?.data ?? []
+  check('the full lifecycle is recorded', final.length === 4, `${final.length} events`)
+  check(
+    'a rejected transition leaves no trace in the log',
+    final.every((e: any) => e.toStatus !== 'CANCELLED'),
+  )
 }
 
 // ─── Concurrency ─────────────────────────────────────────────────────────────

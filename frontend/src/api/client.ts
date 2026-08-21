@@ -1,4 +1,4 @@
-import type { Customer, OrderDetail, OrderStatus, Page } from './types'
+import type { Customer, OrderDetail, OrderEvent, OrderStatus, Page } from './types'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
@@ -78,6 +78,7 @@ export const api = {
   orders: {
     list: (filters: OrderFilters) => request<Page<OrderDetail>>(`/orders${query(filters)}`),
     get: (id: string) => data<OrderDetail>(`/orders/${id}`),
+    timeline: (id: string) => data<OrderEvent[]>(`/orders/${id}/timeline`),
     create: (order: NewOrder) => data<OrderDetail>('/orders', post(order)),
     setStatus: (id: string, status: OrderStatus) =>
       data<OrderDetail>(`/orders/${id}/status`, patch({ status })),
