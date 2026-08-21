@@ -753,7 +753,7 @@ need none and are listed for completeness.
 
 | Document | What it covers |
 |---|---|
-| [`questions.md`](questions.md) | Where the requirements were open to interpretation, what I chose, and the four questions I would put to the product owner |
+| [`questions.md`](questions.md) | Where the requirements were open to interpretation, what I chose, and the questions I would put to the product owner |
 | [`docs/architecture.md`](docs/architecture.md) | Scale figures, transaction boundaries, concurrency, failure modes, what breaks first, and the trade-offs behind each choice |
 | [`docs/api-contract.md`](docs/api-contract.md) | Every endpoint in detail: inputs, outputs and failures |
 | [`infra/README.md`](infra/README.md) | Deploying it, updating it, and what to check when it does not come up |

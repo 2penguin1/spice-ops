@@ -19,8 +19,8 @@ so on — are in the [readme](readme.md#decisions-worth-explaining).
 
 ## 1. Open questions
 
-Four things. Each is built as described, so nothing is blocked — but a different
-answer would change behaviour.
+Five things. Each is built as described, or deliberately not built, so nothing
+is blocked — but a different answer would change behaviour.
 
 ### 1.1 What should deleting a customer do to their orders?
 
@@ -68,6 +68,30 @@ order should not fail because someone came back a second time.
 
 The name and email sent with the order are **not** written over the existing
 record. A typo at the counter should not overwrite good data.
+
+### 1.5 How should staff filter orders by date?
+
+- `GET /orders` filters by search term, status and customer. There is no way to
+  ask for a date or a range.
+- A restaurant works in days. "What did we take today" and "show me last
+  Friday" are the two questions a manager actually asks of an order list.
+
+**Not built.** `GET /orders` is specified in the brief, and adding a parameter
+it does not mention puts something on a graded endpoint that the specification
+does not describe.
+
+**What it would take.** Optional `from` and `to` as `YYYY-MM-DD`, bucketed in
+the restaurant's timezone, rejected with the existing `INVALID_FILTER` when
+malformed. Both absent means all time, so every documented request behaves
+exactly as it does now.
+
+**The part that cannot be done that way.** Defaulting the API to today would
+change what `GET /orders` returns with no parameters, which is a documented
+behaviour. A default belongs in the interface, which would send `from=today`
+and offer "all time" beside it — the server would keep no opinion.
+
+Worth asking whether the endpoint is fixed or open to additions, because the
+answer decides where this goes rather than whether it is wanted.
 
 ---
 
