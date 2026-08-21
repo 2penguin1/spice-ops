@@ -1,0 +1,64 @@
+# Render blueprint: database, API and web app in one deploy.
+#
+# Point Render at this repository and it creates all three, wires the
+# connection string and the two cross-service URLs, and generates a signing
+# secret. Nothing here needs a value pasted in by hand.
+#
+# Redis is deliberately absent. Without it the API runs on one instance with
+# no cache and an in-process event bus, which is the documented fallback and
+# plenty for a demo. Add a Key Value instance and a REDIS_URL to lift that.
+
+databases:
+  - name: spice-db
+    databaseName: spice
+    user: spice
+    plan: free
+
+services:
+  # The API. A container rather than a function, because the event stream holds
+  # its connection open and a function would be killed underneath it.
+  - type: web
+    name: spice-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    # Migrating and seeding here rather than at startup keeps schema changes a
+    # release step, so two instances booting together cannot race each other.
+    # The seed truncates: every deploy resets the demo to the same known data.
+    buildCommand: npm ci && npm run db:migrate && npm run db:seed
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: spice-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        fromService:
+          type: web
+          name: spice-web
+          property: host
+
+  # The web app is a static build; there is no server to run.
+  - type: web
+    name: spice-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: spice-api
+          property: host
+    routes:
+      # The router owns every path, so anything that is not a built file has to
+      # reach index.html. Without this, reloading /orders returns a 404.
+      - type: rewrite
+        source: /*
+        destination: /index.html

@@ -13,7 +13,17 @@ import type {
   TopItem,
 } from './types'
 
-export const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+/**
+ * Where the API lives. A hosting platform that links the two services together
+ * supplies a bare hostname, so a missing scheme means https, not a broken URL.
+ */
+const configured = import.meta.env.VITE_API_URL as string | undefined
+
+export const BASE = configured
+  ? configured.includes('://')
+    ? configured
+    : `https://${configured}`
+  : 'http://localhost:3000'
 
 /** One place decides what Authorization header goes out. */
 let token: string | null = null

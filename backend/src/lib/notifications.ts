@@ -1,9 +1,9 @@
 import { and, eq, lt, sql } from 'drizzle-orm'
 
-import { config } from '../config.ts'
 import { db } from '../db/client.ts'
 import { notifications } from '../db/schema.ts'
 import { prune as pruneIdempotencyKeys } from './idempotency.ts'
+import { driver } from './notifications.drivers.ts'
 import type { Tx } from './orders.tx.ts'
 import type { OrderStatus } from './status.ts'
 
@@ -25,41 +25,6 @@ const MESSAGES: Partial<Record<OrderStatus, (orderNumber: string) => string>> = 
   READY: (n) => `Spice Garden: order ${n} is ready.`,
   CANCELLED: (n) => `Spice Garden: order ${n} has been cancelled. Please speak to a member of staff.`,
 }
-
-// ─── Drivers ─────────────────────────────────────────────────────────────────
-
-type Message = { recipient: string; body: string }
-
-type Driver = { name: string; send: (message: Message) => Promise<void> }
-
-const drivers: Record<string, Driver> = {
-  /** The default. Works with no account and no network. */
-  console: {
-    name: 'console',
-    async send({ recipient, body }) {
-      console.log(`[notify] ${recipient}: ${body}`)
-    },
-  },
-
-  /** Posts to any URL: a Slack webhook, an automation tool, an SMS gateway. */
-  webhook: {
-    name: 'webhook',
-    async send({ recipient, body }) {
-      if (!config.NOTIFY_WEBHOOK_URL) throw new Error('NOTIFY_WEBHOOK_URL is not set')
-
-      const response = await fetch(config.NOTIFY_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ to: recipient, text: body }),
-        signal: AbortSignal.timeout(5000),
-      })
-
-      if (!response.ok) throw new Error(`webhook returned ${response.status}`)
-    },
-  },
-}
-
-const driver = drivers[config.NOTIFY_DRIVER] ?? drivers.console!
 
 // ─── Writing ─────────────────────────────────────────────────────────────────
 

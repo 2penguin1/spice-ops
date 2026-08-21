@@ -471,8 +471,9 @@ app runs correctly on Postgres alone.
 | `RESTAURANT_TZ` | no | `Asia/Kolkata` | Which day and hour a figure belongs to |
 | `CORS_ORIGIN` | no | `http://localhost:5173` | The web app's origin |
 | `REDIS_URL` | no | — | Absent: no cache, events stay within one API copy |
-| `NOTIFY_DRIVER` | no | `console` | `console` logs customer messages, `webhook` posts them |
+| `NOTIFY_DRIVER` | no | `console` | `console` logs customer messages, `webhook` posts them, `whatsapp` sends them |
 | `NOTIFY_WEBHOOK_URL` | no | — | Where the `webhook` driver posts |
+| `GREENAPI_URL` `GREENAPI_ID` `GREENAPI_TOKEN` | no | — | The `whatsapp` driver. All three together or none |
 | `GROQ_API_KEY` | no | — | Turns on the written read of the dashboard |
 | `GROQ_MODEL` | no | `openai/gpt-oss-120b` | Any Groq chat model |
 | `AUTH_DISABLED` | no | `false` | Refuses to boot under `NODE_ENV=production` |
@@ -614,24 +615,56 @@ psql "$DATABASE_URL" -f database/seed.sql
 
 ## Deploying
 
+### Render, from the blueprint
+
+[`render.yaml`](render.yaml) describes the database, the API and the web app.
+Render reads it and creates all three, so nothing is typed in by hand.
+
+1. Push this repository to GitHub.
+2. In Render, choose **New → Blueprint** and pick the repository.
+3. Approve the plan. Render creates `spice-db`, `spice-api` and `spice-web`.
+
+It wires up the parts that usually get pasted wrong:
+
+| Value | Where it comes from |
+|---|---|
+| `DATABASE_URL` | The database it just created |
+| `JWT_SECRET` | Generated, and never shown to anyone |
+| `CORS_ORIGIN` | The web app's own address |
+| `VITE_API_URL` | The API's own address |
+
+The build runs `db:migrate` and `db:seed` before the API starts. Migrating at
+build time rather than on boot keeps it a release step, so two instances
+starting together cannot race. **The seed truncates**, so every deploy resets
+the demo to the same data — which is what you want for a link people try, and
+not what you want if it holds anything real.
+
+**What the free plan costs you:**
+
+- The API sleeps after 15 minutes idle. The first request afterwards takes
+  around a minute, and any open event stream drops.
+- A free Postgres instance expires after 30 days.
+- No Redis, so: no cache, one instance, and an in-process event bus. That is
+  the documented fallback, and everything still works.
+
+### Anywhere else
+
 The API is a stateless container. It reads all configuration from the
 environment, starts without a `.env` file, drains in-flight requests on
 `SIGTERM`, and reports readiness at `/health`.
 
 ```bash
 docker build -t spice-oms-backend ./backend
-docker run -p 3000:3000 \
-  -e DATABASE_URL=... -e JWT_SECRET=... -e CORS_ORIGIN=... \
-  spice-oms-backend
+docker run -p 3000:3000   -e DATABASE_URL=... -e JWT_SECRET=... -e CORS_ORIGIN=...   spice-oms-backend
 ```
 
 - Managed Postgres works as-is; `?sslmode=require` in the connection string is
   honoured.
-- Run `npm run db:migrate` as a release step, never on boot, so two copies
-  starting together cannot race.
+- Run `npm run db:migrate` as a release step, never on boot.
 - The event stream holds a connection open, so the API needs a **container, not
   a serverless function**, and a load balancer idle timeout above 60 seconds.
-- The frontend is a static build. Serve `frontend/dist` from any host or CDN.
+- The frontend is a static build. Serve `frontend/dist` from any host or CDN,
+  and rewrite unknown paths to `index.html` so the router can own them.
 
 ---
 
