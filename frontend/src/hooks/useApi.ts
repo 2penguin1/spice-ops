@@ -18,9 +18,14 @@ export function useApi<T>(load: () => Promise<T>, deps: unknown[]) {
   const [nonce, setNonce] = useState(0)
 
   // Held in a ref so a new inline closure on every render does not re-trigger
-  // the effect; `deps` alone decides when to reload.
+  // the effect; `deps` alone decides when to reload. Written after render
+  // rather than during it — a ref assigned mid-render can be discarded if
+  // React renders again before committing.
   const loadRef = useRef(load)
-  loadRef.current = load
+
+  useEffect(() => {
+    loadRef.current = load
+  })
 
   useEffect(() => {
     let cancelled = false

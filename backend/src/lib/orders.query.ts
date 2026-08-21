@@ -5,6 +5,9 @@ import { customers, orderItems, orders } from '../db/schema.ts'
 import { ApiError } from './errors.ts'
 import { toOrderDetail, type OrderDetail } from './serialize.ts'
 
+/** `db`, or a transaction — so a write can read back what it just wrote. */
+export type Executor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
+
 export type OrderWithCustomer = {
   orders: typeof orders.$inferSelect
   customers: typeof customers.$inferSelect
@@ -14,10 +17,13 @@ export type OrderWithCustomer = {
  * Fetches the items for a whole page of orders in ONE query, then groups them
  * in memory. Twenty orders cost two queries, never twenty-one.
  */
-export async function attachItems(rows: OrderWithCustomer[]): Promise<OrderDetail[]> {
+export async function attachItems(
+  rows: OrderWithCustomer[],
+  executor: Executor = db,
+): Promise<OrderDetail[]> {
   if (rows.length === 0) return []
 
-  const items = await db
+  const items = await executor
     .select()
     .from(orderItems)
     .where(
@@ -40,14 +46,14 @@ export async function attachItems(rows: OrderWithCustomer[]): Promise<OrderDetai
  * this, so the response of a status change and of a plain read are built by
  * the same code and cannot drift apart.
  */
-export async function loadOrderDetail(id: string): Promise<OrderDetail> {
-  const rows = await db
+export async function loadOrderDetail(id: string, executor: Executor = db): Promise<OrderDetail> {
+  const rows = await executor
     .select()
     .from(orders)
     .innerJoin(customers, eq(customers.id, orders.customerId))
     .where(eq(orders.id, id))
 
-  const [order] = await attachItems(rows)
+  const [order] = await attachItems(rows, executor)
   if (!order) throw ApiError.notFound('Order')
 
   return order

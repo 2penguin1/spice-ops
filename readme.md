@@ -100,11 +100,11 @@ npm run smoke
 
 This signs in as each role, walks the full order lifecycle, and exercises every
 error case the contract documents plus the role rules and the live stream —
-123 checks — then
+134 checks — then
 deletes the data it created. It should end with:
 
 ```
-123/123 checks passed
+134/134 checks passed
 Contract intact.
 ```
 
@@ -127,6 +127,11 @@ TOKEN=$(curl -s -X POST http://localhost:3000/auth/login -H 'content-type: appli
 curl -H "Authorization: Bearer $TOKEN" "http://localhost:3000/orders?status=READY&size=2"
 curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/customers
 ```
+
+**Retrying safely.** `POST /orders` accepts an optional `Idempotency-Key`
+header. Send the same key twice and you get the same order back rather than a
+second one — what a client needs when the wifi drops before the response
+arrives. Without the header nothing changes.
 
 **Checking the contract without tokens.** Set `AUTH_DISABLED=true` in
 `backend/.env` and restart. Every route then accepts anonymous requests, so the
@@ -221,6 +226,7 @@ Beyond the assignment contract:
 | `GET` | `/analytics/staff` | Orders started and finished per person, and how long they took |
 | `GET` | `/analytics/items` | Best selling dishes |
 | `GET` | `/analytics/insights` | A written read of the figures above, if an AI provider is configured |
+| `GET` | `/notifications?orderId=` | What the system tried to tell customers, and whether it worked |
 
 Every success is wrapped in `{ "data": … }`, with
 `"meta": { "pagination": … }` on list endpoints. Every failure is
@@ -299,6 +305,8 @@ Run from `frontend/`:
 | `REDIS_URL` | no | — | Absent: no cache, one warning at boot |
 | `GROQ_API_KEY` | no | — | Turns on the written read of the dashboard. Absent: the figures still render and one panel is hidden |
 | `GROQ_MODEL` | no | `openai/gpt-oss-120b` | Any Groq chat model |
+| `NOTIFY_DRIVER` | no | `console` | `console` logs customer messages; `webhook` POSTs them |
+| `NOTIFY_WEBHOOK_URL` | no | — | Where the `webhook` driver posts |
 | `AUTH_DISABLED` | no | `false` | Refuses to boot under `NODE_ENV=production` |
 
 **`frontend/.env`**

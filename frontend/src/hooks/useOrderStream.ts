@@ -17,7 +17,13 @@ const RECONNECT_MS = 3000
  */
 export function useOrderStream(onUpdate: (update: OrderUpdate) => void) {
   const handler = useRef(onUpdate)
-  handler.current = onUpdate
+
+  // Assigned after render, not during it: React may render a component more
+  // than once before committing, and a ref written in that window can be
+  // thrown away.
+  useEffect(() => {
+    handler.current = onUpdate
+  })
 
   useEffect(() => {
     let source: EventSource | null = null

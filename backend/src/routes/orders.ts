@@ -8,6 +8,8 @@ import { assertCanSetStatus, requireRole, type AuthVariables } from '../lib/auth
 import { ApiError, fromPostgresError } from '../lib/errors.ts'
 import { attachItems, loadOrderDetail } from '../lib/orders.query.ts'
 import { invalidateAnalytics } from '../lib/cache.ts'
+import { claimKey, findReplay, isDuplicateKey } from '../lib/idempotency.ts'
+import { queueNotification } from '../lib/notifications.ts'
 import { emitOrderUpdated } from '../lib/events.ts'
 import { recordEvent, transitionOrder, type Tx } from '../lib/orders.tx.ts'
 import {
@@ -57,6 +59,8 @@ const createOrderBody = z.object({
 const statusBody = z.object({ status: orderStatusSchema })
 
 const itemIdParam = z.object({ id: z.uuid(), itemId: z.uuid() })
+
+const ENDPOINT = 'POST /orders'
 
 const contains = (term: string) => `%${term.replace(/[\\%_]/g, '\\$&')}%`
 
@@ -180,8 +184,16 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
   .post('/', requireRole('ADMIN', 'MANAGER', 'SERVICE'), validate('json', createOrderBody), async (c) => {
     const body = c.req.valid('json')
 
+    // Optional. Absent, nothing about this endpoint changes.
+    const key = c.req.header('Idempotency-Key')
+
+    if (key) {
+      const replay = await findReplay(key, ENDPOINT, body)
+      if (replay) return c.json(replay.body as object, replay.statusCode as 201)
+    }
+
     // One transaction: a half-written order with no items must never exist.
-    const orderId = await db.transaction(async (tx) => {
+    const created = await db.transaction(async (tx) => {
       const customerId = await resolveCustomer(tx, body.customer)
 
       const [order] = await tx.insert(orders).values({ customerId }).returning({ id: orders.id })
@@ -200,14 +212,51 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
       // The order came from nowhere, so this event has no previous status.
       await recordEvent(tx, { orderId: order!.id, from: null, to: 'CONFIRMED' })
 
-      return order!.id
+      // Read back inside the transaction, so the response we store under the
+      // idempotency key is byte for byte the one we are about to return.
+      const detail = await loadOrderDetail(order!.id, tx)
+
+      await queueNotification(tx, {
+        orderId: detail.id,
+        orderNumber: detail.orderNumber,
+        status: 'CONFIRMED',
+        phone: detail.customer.phone,
+      })
+
+      if (key) {
+        await claimKey(tx, {
+          key,
+          endpoint: ENDPOINT,
+          body,
+          statusCode: 201,
+          response: { data: detail },
+        })
+      }
+
+      return detail
+    }).catch(async (error) => {
+      // A second request with the same key blocked on the primary key until
+      // the first committed, and now finds it taken. Replay theirs.
+      if (key && isDuplicateKey(error)) {
+        const replay = await findReplay(key, ENDPOINT, body)
+        if (replay) return null
+      }
+      throw error
     })
 
-    const order = await loadOrderDetail(orderId)
-    emitOrderUpdated({ orderId, orderNumber: order.orderNumber, status: order.status })
+    if (created === null) {
+      const replay = (await findReplay(key!, ENDPOINT, body))!
+      return c.json(replay.body as object, replay.statusCode as 201)
+    }
+
+    emitOrderUpdated({
+      orderId: created.id,
+      orderNumber: created.orderNumber,
+      status: created.status,
+    })
     void invalidateAnalytics()
 
-    return c.json({ data: order }, 201)
+    return c.json({ data: created }, 201)
   })
 
   /** PATCH /orders/{order_id}/status — advance the order through its lifecycle. */

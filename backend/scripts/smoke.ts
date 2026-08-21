@@ -307,6 +307,87 @@ async function analytics() {
   check('staff analytics never exposes a password hash', !JSON.stringify(staff.body).includes('scrypt'))
 }
 
+async function retriesAndNotifications() {
+  const payload = {
+    customer: { name: 'Retry Diner', phone: phone(11) },
+    items: [{ itemName: 'Chicken Biryani', quantity: 1, unitPrice: 380 }],
+  }
+
+  const key = `smoke-${RUN}`
+
+  const first = await fetch(`${BASE}/orders`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      Authorization: `Bearer ${tokens.manager}`,
+      'Idempotency-Key': key,
+    },
+    body: JSON.stringify(payload),
+  })
+  const firstBody = await first.json()
+  check('an order with an idempotency key is created', first.status === 201, `got ${first.status}`)
+  if (firstBody?.data?.customerId) createdCustomerIds.add(firstBody.data.customerId)
+
+  // The retry a client makes when it never saw the response.
+  const retry = await fetch(`${BASE}/orders`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      Authorization: `Bearer ${tokens.manager}`,
+      'Idempotency-Key': key,
+    },
+    body: JSON.stringify(payload),
+  })
+  const retryBody = await retry.json()
+
+  check('a retry returns the same status', retry.status === 201, `got ${retry.status}`)
+  check(
+    'a retry returns the SAME order, not a second one',
+    retryBody?.data?.id === firstBody?.data?.id,
+    `${firstBody?.data?.orderNumber} vs ${retryBody?.data?.orderNumber}`,
+  )
+
+  // Same key, different order: a client bug that must not be silently absorbed.
+  const different = await fetch(`${BASE}/orders`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      Authorization: `Bearer ${tokens.manager}`,
+      'Idempotency-Key': key,
+    },
+    body: JSON.stringify({ ...payload, items: [{ itemName: 'Naan', quantity: 9, unitPrice: 70 }] }),
+  })
+  check('reusing a key for a different request is rejected', different.status === 400, `got ${different.status}`)
+
+  // Without a key the endpoint behaves exactly as it always did.
+  const a = await call('POST', '/orders', { ...payload, customer: { name: 'No Key', phone: phone(12) } })
+  const b = await call('POST', '/orders', { ...payload, customer: { name: 'No Key', phone: phone(12) } })
+  if (a.body?.data?.customerId) createdCustomerIds.add(a.body.data.customerId)
+  check('without a key, two identical requests make two orders', a.body?.data?.id !== b.body?.data?.id)
+
+  // The outbox row was written with the order, in the same transaction.
+  const orderId = firstBody?.data?.id
+  const queued = await call('GET', `/notifications?orderId=${orderId}`)
+  expect('the outbox can be inspected', queued, 200)
+  check('placing an order queued exactly one message', queued.body?.data?.length === 1, `${queued.body?.data?.length}`)
+  check(
+    'the retry did not queue a second message',
+    queued.body?.data?.filter((n: any) => n.body.includes('have your order')).length === 1,
+  )
+
+  // The worker drains every few seconds; give it one cycle.
+  await new Promise((resolve) => setTimeout(resolve, 6500))
+  const drained = await call('GET', `/notifications?orderId=${orderId}`)
+  check(
+    'the worker sent it',
+    drained.body?.data?.[0]?.status === 'SENT',
+    `status ${drained.body?.data?.[0]?.status}, attempts ${drained.body?.data?.[0]?.attempts}`,
+  )
+  check('a sent message records when', drained.body?.data?.[0]?.sentAt !== null)
+
+  expect('the kitchen cannot read the outbox', await call('GET', '/notifications', undefined, 'cook'), 403, 'FORBIDDEN')
+}
+
 // ─── Envelope shapes ─────────────────────────────────────────────────────────
 
 async function envelopes() {
@@ -615,6 +696,7 @@ try {
   await roles()
   await stream()
   await analytics()
+  await retriesAndNotifications()
   await envelopes()
   await customers()
   await lifecycle(await orders())
