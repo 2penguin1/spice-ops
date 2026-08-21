@@ -7,6 +7,7 @@ import { requestId, type RequestIdVariables } from 'hono/request-id'
 import { config } from './config.ts'
 import { pool } from './db/client.ts'
 import { errorHandler, notFoundHandler } from './lib/errors.ts'
+import { customerRoutes } from './routes/customers.ts'
 
 const app = new Hono<{ Variables: RequestIdVariables }>()
 
@@ -22,6 +23,8 @@ app.get('/health', async (c) => {
 
   return c.json({ data: { status: db === 'up' ? 'ok' : 'degraded', db } }, db === 'up' ? 200 : 503)
 })
+
+app.route('/customers', customerRoutes)
 
 app.notFound(notFoundHandler)
 app.onError(errorHandler)
