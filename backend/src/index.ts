@@ -8,6 +8,7 @@ import { config } from './config.ts'
 import { pool } from './db/client.ts'
 import { errorHandler, notFoundHandler } from './lib/errors.ts'
 import { customerRoutes } from './routes/customers.ts'
+import { orderRoutes } from './routes/orders.ts'
 
 const app = new Hono<{ Variables: RequestIdVariables }>()
 
@@ -25,6 +26,7 @@ app.get('/health', async (c) => {
 })
 
 app.route('/customers', customerRoutes)
+app.route('/orders', orderRoutes)
 
 app.notFound(notFoundHandler)
 app.onError(errorHandler)
