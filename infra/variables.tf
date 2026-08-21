@@ -4,6 +4,19 @@ variable "region" {
   default     = "ap-south-1" # Mumbai
 }
 
+variable "aws_profile" {
+  description = <<-EOT
+    Which set of credentials in ~/.aws to use. Empty means the default
+    profile, or the AWS_PROFILE and AWS_ACCESS_KEY_ID environment variables
+    if they are set.
+
+    Naming it here rather than relying on whatever is default means this
+    cannot quietly build into the wrong account.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "instance_type" {
   description = "Free tier is t3.micro or t2.micro for the first 12 months of a new account."
   type        = string

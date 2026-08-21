@@ -1,5 +1,8 @@
 # Copy to terraform.tfvars and edit. That file is gitignored.
 
+# Which credentials in ~/.aws to use. Empty uses the default profile.
+aws_profile = ""
+
 # Nearest region to whoever will be using it.
 region = "ap-south-1"
 
