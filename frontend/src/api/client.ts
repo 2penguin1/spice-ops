@@ -1,7 +1,7 @@
 import type { Role } from '../lib/permissions'
 import type { Customer, OrderDetail, OrderEvent, OrderStatus, Page } from './types'
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+export const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
 /**
  * Held in a module variable rather than read from storage on every call, so
@@ -97,6 +97,12 @@ export const api = {
         '/auth/login',
         post({ email, password }),
       ),
+  },
+
+  events: {
+    // A ticket lasts 60 seconds and works on no other route, because
+    // EventSource cannot send an Authorization header.
+    ticket: () => data<{ ticket: string }>('/events/ticket', { method: 'POST' }),
   },
 
   health: () => data<{ status: string; db: string }>('/health'),

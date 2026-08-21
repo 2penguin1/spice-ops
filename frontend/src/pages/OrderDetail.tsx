@@ -7,6 +7,7 @@ import { ErrorBanner } from '../components/ErrorBanner'
 import { StatusBadge } from '../components/StatusBadge'
 import { Timeline } from '../components/Timeline'
 import { useApi } from '../hooks/useApi'
+import { useOrderStream } from '../hooks/useOrderStream'
 import { formatAge, formatMoney, formatWhen } from '../lib/format'
 import { MENU } from '../lib/menu'
 import { useAuth } from '../lib/auth'
@@ -33,6 +34,14 @@ export function OrderDetail() {
   const [busy, setBusy] = useState(false)
 
   const current = order ?? data
+
+  // If another member of staff moves this order, show it here immediately.
+  useOrderStream((update) => {
+    if (update.orderId === id) {
+      setOrder(null)
+      reload()
+    }
+  })
 
   async function run(action: () => Promise<Order>) {
     setBusy(true)

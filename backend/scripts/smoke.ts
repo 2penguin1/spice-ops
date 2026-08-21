@@ -18,7 +18,9 @@ const BASE = process.env.SMOKE_URL ?? 'http://localhost:3000'
 // Unique per run, so the script can be run repeatedly without colliding on
 // the phone unique constraint.
 const RUN = Date.now().toString().slice(-7)
-const phone = (n: number) => `+91 7${RUN}${n}`
+// Zero-padded so no number is a prefix of another: without it phone(1)
+// is a substring of phone(10), and a search for one finds both.
+const phone = (n: number) => `+91 7${RUN}${String(n).padStart(2, '0')}`
 
 type Result = { label: string; ok: boolean; detail: string }
 const results: Result[] = []
@@ -181,6 +183,76 @@ async function roles() {
   // Attribution: the log records who moved it.
   const events = (await call('GET', `/orders/${id}/timeline`)).body?.data ?? []
   check('the log records every move', events.length === 4, `${events.length} events`)
+}
+
+async function stream() {
+  expect(
+    'the event stream refuses an anonymous request',
+    await callAnonymous('GET', '/events'),
+    401,
+    'UNAUTHORIZED',
+  )
+
+  const ticketResponse = await call('POST', '/events/ticket')
+  expect('a signed-in user can get a stream ticket', ticketResponse, 200)
+  const ticket = ticketResponse.body?.data?.ticket
+
+  // The two token kinds must not be interchangeable: a leaked stream ticket in
+  // a URL must not open the API, and a session token must not open a stream.
+  expect(
+    'a session token is not accepted as a stream ticket',
+    await callAnonymous('GET', `/events?ticket=${encodeURIComponent(tokens.manager!)}`),
+    401,
+    'UNAUTHORIZED',
+  )
+
+  const asSession = await fetch(`${BASE}/orders`, {
+    headers: { Authorization: `Bearer ${ticket}` },
+  })
+  check('a stream ticket is not accepted as a session token', asSession.status === 401, `got ${asSession.status}`)
+
+  // Open the stream, change an order, and confirm the frame arrives.
+  const created = await call('POST', '/orders', {
+    customer: { name: 'Stream Watcher', phone: phone(10) },
+    items: [{ itemName: 'Tandoori Roti', quantity: 1, unitPrice: 40 }],
+  })
+  const orderId = created.body?.data?.id
+  if (created.body?.data?.customerId) createdCustomerIds.add(created.body.data.customerId)
+
+  const controller = new AbortController()
+  const frames: string[] = []
+
+  const reading = fetch(`${BASE}/events?ticket=${encodeURIComponent(ticket)}`, {
+    signal: controller.signal,
+  }).then(async (res) => {
+    const reader = res.body!.getReader()
+    const decoder = new TextDecoder()
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        frames.push(decoder.decode(value))
+      }
+    } catch {
+      // Aborted on purpose below.
+    }
+  })
+
+  await new Promise((resolve) => setTimeout(resolve, 500))
+  await call('PATCH', `/orders/${orderId}/status`, { status: 'PREPARING' })
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+
+  controller.abort()
+  await reading
+
+  const received = frames.join('')
+  check('the stream opens and announces itself', received.includes('event: ready'))
+  check('a status change is announced on the stream', received.includes('event: order:updated'))
+  check('the announcement names the order', received.includes(orderId), 'frame did not carry the order id')
+  check(
+    'the announcement carries an id, not the whole order',
+    !received.includes('totalAmount') && !received.includes('items'),
+  )
 }
 
 // ─── Envelope shapes ─────────────────────────────────────────────────────────
@@ -489,6 +561,7 @@ try {
   await signIn()
   await protection()
   await roles()
+  await stream()
   await envelopes()
   await customers()
   await lifecycle(await orders())

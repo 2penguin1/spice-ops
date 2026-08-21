@@ -7,6 +7,7 @@ import { Pagination } from '../components/Pagination'
 import { SkeletonRows } from '../components/Skeleton'
 import { StatusBadge } from '../components/StatusBadge'
 import { useApi, useDebounced } from '../hooks/useApi'
+import { useOrderStream } from '../hooks/useOrderStream'
 import { useAuth } from '../lib/auth'
 import { canTakeOrders } from '../lib/permissions'
 import { formatAge, formatMoney } from '../lib/format'
@@ -30,6 +31,9 @@ export function Orders() {
     () => api.orders.list({ search: debouncedSearch || undefined, status, page, size: SIZE }),
     [debouncedSearch, status, page],
   )
+
+  // Someone else advancing an order updates this list without a refresh.
+  useOrderStream(() => reload())
 
   function update(changes: Record<string, string | undefined>) {
     const next = new URLSearchParams(params)

@@ -537,6 +537,86 @@ tbody tr.clickable:hover td {
   margin: 0;
 }
 
+/* ── Kitchen board ──────────────────────────────────────────────────────── */
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+
+.board-column > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--line);
+}
+
+.board-hint {
+  margin: 8px 0 12px;
+}
+
+.board-empty {
+  padding: 18px 0;
+}
+
+.ticket-card {
+  position: relative;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--completed);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  color: var(--ink);
+}
+
+/* The stripe is set per status directly. Using currentColor here would make
+   every child inherit the status colour, including the button label, which
+   then needs a more specific rule to undo — a fight not worth having. */
+.ticket-card.status-CONFIRMED { border-left-color: var(--confirmed); }
+.ticket-card.status-PREPARING { border-left-color: var(--preparing); }
+.ticket-card.status-READY { border-left-color: var(--ready); }
+
+.ticket-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ticket-card-number {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ticket-card-number:hover {
+  text-decoration: underline;
+}
+
+.ticket-card p {
+  margin: 2px 0 8px;
+}
+
+.ticket-card-items {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  font-size: 14px;
+}
+
+.ticket-card-items li {
+  padding: 1px 0;
+}
+
+@media (max-width: 900px) {
+  .board {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Sign in ───────────────────────────────────────────────────────────── */
 
 .signin {

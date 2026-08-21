@@ -42,8 +42,10 @@ docker compose ps
 > already taken on your machine, see [Troubleshooting](#troubleshooting) — this
 > is the most common snag.
 
-Redis is optional. Nothing in the assignment scope uses it yet, and the API
-runs correctly without it.
+Redis is optional. It fans live updates out between API instances, so a change
+made on one is seen by screens connected to another. With one instance — or no
+Redis at all — the in-memory bus does the same job and everything still works.
+Set `REDIS_URL=redis://localhost:6379` in `backend/.env` to switch it on.
 
 ### 2. Set up the API
 
@@ -97,11 +99,12 @@ npm run smoke
 ```
 
 This signs in as each role, walks the full order lifecycle, and exercises every
-error case the contract documents plus the role rules — 99 checks — then
+error case the contract documents plus the role rules and the live stream —
+107 checks — then
 deletes the data it created. It should end with:
 
 ```
-99/99 checks passed
+107/107 checks passed
 Contract intact.
 ```
 
@@ -139,6 +142,7 @@ flag under `NODE_ENV=production`, and warns on every boot.
 | **Orders** | `/orders` | Search by order number, customer name or phone. Filter by status. Paginated. Filters live in the URL, so a filtered view can be shared. |
 | **Order** | `/orders/:id` | The order as a kitchen ticket. Advance its status, add and remove items, see the customer. Only legal next moves are offered. |
 | **Take an order** | `/orders/new` | Pick dishes from the menu, then either attach an existing customer or enter a new one. |
+| **Kitchen** | `/kitchen` | Live board: waiting, cooking, ready. One-click advance. Updates on its own when anyone changes an order. |
 | **Customers** | `/customers` | Search, add, edit and delete. Hidden from the kitchen. |
 
 Each order also shows its **history** — every status it has been through, when,
@@ -208,6 +212,8 @@ Beyond the assignment contract:
 | `GET` | `/auth/me` | The current token's owner |
 | `GET` | `/orders/{id}/timeline` | Every status the order has been through, and who moved it |
 | `GET/POST/PATCH/DELETE` | `/staff` | Staff management |
+| `POST` | `/events/ticket` | A 60 second ticket for the event stream |
+| `GET` | `/events?ticket=…` | Server-sent events; announces order changes |
 
 Every success is wrapped in `{ "data": … }`, with
 `"meta": { "pagination": … }` on list endpoints. Every failure is
