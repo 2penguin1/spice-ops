@@ -6,11 +6,14 @@ import { requestId, type RequestIdVariables } from 'hono/request-id'
 
 import { config } from './config.ts'
 import { pool } from './db/client.ts'
+import { requireAuth, type AuthVariables } from './lib/auth.ts'
 import { errorHandler, notFoundHandler } from './lib/errors.ts'
+import { authRoutes } from './routes/auth.ts'
+import { staffRoutes } from './routes/staff.ts'
 import { customerRoutes } from './routes/customers.ts'
 import { orderRoutes } from './routes/orders.ts'
 
-const app = new Hono<{ Variables: RequestIdVariables }>()
+const app = new Hono<{ Variables: RequestIdVariables & AuthVariables }>()
 
 app.use(requestId())
 app.use(logger())
@@ -25,8 +28,16 @@ app.get('/health', async (c) => {
   return c.json({ data: { status: db === 'up' ? 'ok' : 'degraded', db } }, db === 'up' ? 200 : 503)
 })
 
+// /health and /auth/login are the only routes reachable without a token.
+app.route('/auth', authRoutes)
+
+app.use('/customers/*', requireAuth)
+app.use('/orders/*', requireAuth)
+app.use('/staff/*', requireAuth)
+
 app.route('/customers', customerRoutes)
 app.route('/orders', orderRoutes)
+app.route('/staff', staffRoutes)
 
 app.notFound(notFoundHandler)
 app.onError(errorHandler)

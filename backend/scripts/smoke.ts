@@ -26,7 +26,28 @@ const createdCustomerIds = new Set<string>()
 
 type Response = { status: number; body: any }
 
-async function call(method: string, path: string, body?: unknown): Promise<Response> {
+/**
+ * Tokens for each role. The contract is exercised as a manager, and the other
+ * three are used to prove the role rules. Populated by signIn().
+ */
+const tokens: Record<string, string> = {}
+
+async function call(method: string, path: string, body?: unknown, as = 'manager'): Promise<Response> {
+  const headers: Record<string, string> = {}
+  if (body !== undefined) headers['content-type'] = 'application/json'
+  if (tokens[as]) headers.Authorization = `Bearer ${tokens[as]}`
+
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  const text = await res.text()
+  return { status: res.status, body: text ? JSON.parse(text) : null }
+}
+
+/** Same as call(), but deliberately sends no Authorization header. */
+async function callAnonymous(method: string, path: string, body?: unknown): Promise<Response> {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: body === undefined ? {} : { 'content-type': 'application/json' },
@@ -55,6 +76,111 @@ function check(label: string, ok: boolean, detail = '') {
 
 function keysOf(value: object) {
   return Object.keys(value).sort().join(',')
+}
+
+// ─── Authentication ──────────────────────────────────────────────────────────
+
+async function signIn() {
+  for (const who of ['admin', 'manager', 'cook', 'server']) {
+    const res = await callAnonymous('POST', '/auth/login', {
+      email: `${who}@spice.test`,
+      password: 'spice123',
+    })
+    expect(`${who} can sign in`, res, 200)
+    if (res.body?.data?.token) tokens[who] = res.body.data.token
+  }
+
+  check('a token was issued for every role', Object.keys(tokens).length === 4)
+
+  expect(
+    'a wrong password is rejected',
+    await callAnonymous('POST', '/auth/login', { email: 'admin@spice.test', password: 'wrong' }),
+    401,
+    'UNAUTHORIZED',
+  )
+
+  // The same message for both cases, so responses cannot be used to discover
+  // which email addresses exist.
+  const unknown = await callAnonymous('POST', '/auth/login', {
+    email: 'nobody@spice.test',
+    password: 'spice123',
+  })
+  expect('an unknown email is rejected', unknown, 401, 'UNAUTHORIZED')
+  check(
+    'unknown user and wrong password are indistinguishable',
+    unknown.body?.error?.message ===
+      (await callAnonymous('POST', '/auth/login', { email: 'admin@spice.test', password: 'x' })).body?.error
+        ?.message,
+  )
+
+  check('the login response never contains a password hash', !JSON.stringify(await callAnonymous('POST', '/auth/login', { email: 'admin@spice.test', password: 'spice123' })).includes('scrypt'))
+}
+
+async function protection() {
+  for (const path of ['/customers', '/orders', '/staff']) {
+    expect(`${path} rejects an anonymous request`, await callAnonymous('GET', path), 401, 'UNAUTHORIZED')
+  }
+
+  expect(
+    'a forged token is rejected',
+    await callAnonymous('GET', '/orders', undefined).then(() =>
+      fetch(`${BASE}/orders`, { headers: { Authorization: 'Bearer not.a.real.token' } }).then(async (r) => ({
+        status: r.status,
+        body: await r.json(),
+      })),
+    ),
+    401,
+    'UNAUTHORIZED',
+  )
+
+  expect('health needs no token', await callAnonymous('GET', '/health'), 200)
+}
+
+async function roles() {
+  // Reading is open to everyone who is signed in.
+  for (const who of ['admin', 'manager', 'cook', 'server']) {
+    expect(`${who} can read orders`, await call('GET', '/orders?size=1', undefined, who), 200)
+  }
+
+  const created = await call('POST', '/orders', {
+    customer: { name: 'Role Test', phone: phone(8) },
+    items: [{ itemName: 'Dal Makhani', quantity: 1, unitPrice: 280 }],
+  })
+  const id = created.body?.data?.id
+  if (created.body?.data?.customerId) createdCustomerIds.add(created.body.data.customerId)
+
+  const move = (status: string, who: string) => call('PATCH', `/orders/${id}/status`, { status }, who)
+
+  expect('the kitchen cannot take an order', await call('POST', '/orders', {
+    customer: { name: 'X', phone: phone(9) },
+    items: [{ itemName: 'A', quantity: 1, unitPrice: 10 }],
+  }, 'cook'), 403, 'FORBIDDEN')
+
+  expect('the floor cannot start prep', await move('PREPARING', 'server'), 403, 'FORBIDDEN')
+  expect('the kitchen can start prep', await move('PREPARING', 'cook'), 200)
+  expect('the kitchen cannot cancel', await move('CANCELLED', 'cook'), 403, 'FORBIDDEN')
+  expect('the kitchen can mark ready', await move('READY', 'cook'), 200)
+  expect('the kitchen cannot complete', await move('COMPLETED', 'cook'), 403, 'FORBIDDEN')
+  expect('the floor can complete', await move('COMPLETED', 'server'), 200)
+
+  expect(
+    'the floor cannot delete a customer',
+    await call('DELETE', '/customers/11111111-1111-4111-8111-111111111111', undefined, 'server'),
+    403,
+    'FORBIDDEN',
+  )
+  expect('the kitchen cannot see staff', await call('GET', '/staff', undefined, 'cook'), 403, 'FORBIDDEN')
+  expect('a manager can see staff', await call('GET', '/staff', undefined, 'manager'), 200)
+
+  const staff = await call('GET', '/staff', undefined, 'manager')
+  check(
+    'staff records never expose a password hash',
+    !JSON.stringify(staff.body).includes('scrypt') && !JSON.stringify(staff.body).includes('passwordHash'),
+  )
+
+  // Attribution: the log records who moved it.
+  const events = (await call('GET', `/orders/${id}/timeline`)).body?.data ?? []
+  check('the log records every move', events.length === 4, `${events.length} events`)
 }
 
 // ─── Envelope shapes ─────────────────────────────────────────────────────────
@@ -360,6 +486,9 @@ async function cleanup() {
 console.log(`Contract smoke test against ${BASE}\n`)
 
 try {
+  await signIn()
+  await protection()
+  await roles()
   await envelopes()
   await customers()
   await lifecycle(await orders())

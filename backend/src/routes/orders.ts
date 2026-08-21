@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import { db } from '../db/client.ts'
 import { customers, orderItems, orders, orderStatusEvents } from '../db/schema.ts'
+import { assertCanSetStatus, requireRole, type AuthVariables } from '../lib/auth.ts'
 import { ApiError, fromPostgresError } from '../lib/errors.ts'
 import { attachItems, loadOrderDetail } from '../lib/orders.query.ts'
 import { recordEvent, transitionOrder, type Tx } from '../lib/orders.tx.ts'
@@ -120,7 +121,9 @@ async function resolveCustomer(tx: Tx, input: CustomerInput): Promise<string> {
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
-export const orderRoutes = new Hono()
+// Reading is open to any signed-in role; the guards below cover the actions
+// that change something.
+export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
 
   /** GET /orders — paginated list with search, status and customer filters. */
   .get('/', validate('query', listQuery, 'INVALID_FILTER'), async (c) => {
@@ -172,7 +175,7 @@ export const orderRoutes = new Hono()
   })
 
   /** POST /orders — create, attaching to an existing customer or making one. */
-  .post('/', validate('json', createOrderBody), async (c) => {
+  .post('/', requireRole('ADMIN', 'MANAGER', 'SERVICE'), validate('json', createOrderBody), async (c) => {
     const body = c.req.valid('json')
 
     // One transaction: a half-written order with no items must never exist.
@@ -207,7 +210,14 @@ export const orderRoutes = new Hono()
     validate('param', uuidParam, 'RESOURCE_NOT_FOUND'),
     validate('json', statusBody),
     async (c) => {
-      const order = await transitionOrder(c.req.valid('param').id, c.req.valid('json').status)
+      const staff = c.get('staff')
+      const { status } = c.req.valid('json')
+
+      // Who may make this move depends on the status being requested, so the
+      // check lives with the other authorization rules, not in this handler.
+      assertCanSetStatus(staff, status)
+
+      const order = await transitionOrder(c.req.valid('param').id, status, staff.id)
       return c.json({ data: order })
     },
   )
@@ -237,6 +247,7 @@ export const orderRoutes = new Hono()
   /** POST /orders/{order_id}/items — returns the whole order, per the contract. */
   .post(
     '/:id/items',
+    requireRole('ADMIN', 'MANAGER', 'SERVICE'),
     validate('param', uuidParam, 'RESOURCE_NOT_FOUND'),
     validate('json', itemBody),
     async (c) => {
@@ -258,7 +269,11 @@ export const orderRoutes = new Hono()
   )
 
   /** DELETE /orders/{order_id}/items/{item_id} — 200 with the order, not 204. */
-  .delete('/:id/items/:itemId', validate('param', itemIdParam, 'RESOURCE_NOT_FOUND'), async (c) => {
+  .delete(
+    '/:id/items/:itemId',
+    requireRole('ADMIN', 'MANAGER', 'SERVICE'),
+    validate('param', itemIdParam, 'RESOURCE_NOT_FOUND'),
+    async (c) => {
     const { id, itemId } = c.req.valid('param')
 
     await loadOrderDetail(id)
@@ -270,7 +285,8 @@ export const orderRoutes = new Hono()
       .where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, id)))
       .returning({ id: orderItems.id })
 
-    if (deleted.length === 0) throw ApiError.notFound('Order item')
+      if (deleted.length === 0) throw ApiError.notFound('Order item')
 
-    return c.json({ data: await loadOrderDetail(id) })
-  })
+      return c.json({ data: await loadOrderDetail(id) })
+    },
+  )

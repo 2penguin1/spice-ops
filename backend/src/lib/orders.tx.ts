@@ -18,12 +18,13 @@ export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
  */
 export function recordEvent(
   tx: Tx,
-  event: { orderId: string; from: OrderStatus | null; to: OrderStatus },
+  event: { orderId: string; from: OrderStatus | null; to: OrderStatus; staffId?: string | null },
 ) {
   return tx.insert(orderStatusEvents).values({
     orderId: event.orderId,
     fromStatus: event.from,
     toStatus: event.to,
+    staffId: event.staffId ?? null,
   })
 }
 
@@ -33,7 +34,11 @@ export function recordEvent(
  * Routes call this rather than issuing their own UPDATE, so every transition
  * is checked, logged, and — from phase 13 — announced from one place.
  */
-export async function transitionOrder(orderId: string, to: OrderStatus): Promise<OrderDetail> {
+export async function transitionOrder(
+  orderId: string,
+  to: OrderStatus,
+  staffId: string | null = null,
+): Promise<OrderDetail> {
   const [current] = await db.select({ status: orders.status }).from(orders).where(eq(orders.id, orderId))
   if (!current) throw ApiError.notFound('Order')
 
@@ -59,7 +64,7 @@ export async function transitionOrder(orderId: string, to: OrderStatus): Promise
       )
     }
 
-    await recordEvent(tx, { orderId, from: current.status, to })
+    await recordEvent(tx, { orderId, from: current.status, to, staffId })
   })
 
   return loadOrderDetail(orderId)

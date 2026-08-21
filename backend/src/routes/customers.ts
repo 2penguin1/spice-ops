@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import { db } from '../db/client.ts'
 import { customers } from '../db/schema.ts'
+import { requireRole, type AuthVariables } from '../lib/auth.ts'
 import { ApiError } from '../lib/errors.ts'
 import { toCustomer } from '../lib/serialize.ts'
 import {
@@ -39,7 +40,7 @@ const omitUndefined = <T extends object>(value: T) =>
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
-export const customerRoutes = new Hono()
+export const customerRoutes = new Hono<{ Variables: AuthVariables }>()
 
   /** GET /customers — paginated list, optionally filtered by a search term. */
   .get('/', validate('query', listQuery, 'INVALID_FILTER'), async (c) => {
@@ -74,7 +75,7 @@ export const customerRoutes = new Hono()
   })
 
   /** POST /customers — create. A duplicate phone surfaces as 23505 from the unique index. */
-  .post('/', validate('json', customerBody), async (c) => {
+  .post('/', requireRole('ADMIN', 'MANAGER', 'SERVICE'), validate('json', customerBody), async (c) => {
     const body = c.req.valid('json')
 
     const [created] = await db
@@ -88,6 +89,7 @@ export const customerRoutes = new Hono()
   /** PATCH /customers/{id} — every field optional; an empty body is a no-op. */
   .patch(
     '/:id',
+    requireRole('ADMIN', 'MANAGER', 'SERVICE'),
     validate('param', uuidParam, 'RESOURCE_NOT_FOUND'),
     validate('json', patchBody),
     async (c) => {
@@ -118,7 +120,11 @@ export const customerRoutes = new Hono()
    * contract lists no conflict error for a customer who still has orders, which
    * forces that behaviour — it is the top open question in questions.md §1.1.
    */
-  .delete('/:id', validate('param', uuidParam, 'RESOURCE_NOT_FOUND'), async (c) => {
+  .delete(
+    '/:id',
+    requireRole('ADMIN', 'MANAGER'),
+    validate('param', uuidParam, 'RESOURCE_NOT_FOUND'),
+    async (c) => {
     const { id } = c.req.valid('param')
 
     const deleted = await db
@@ -126,6 +132,7 @@ export const customerRoutes = new Hono()
       .where(eq(customers.id, id))
       .returning({ id: customers.id })
 
-    if (deleted.length === 0) throw ApiError.notFound('Customer')
-    return c.body(null, 204)
-  })
+      if (deleted.length === 0) throw ApiError.notFound('Customer')
+      return c.body(null, 204)
+    },
+  )
