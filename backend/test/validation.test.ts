@@ -56,6 +56,24 @@ describe('postgres error mapping', () => {
     assert.match(mapped.message, /phone number/)
   })
 
+  it('finds the driver error inside a wrapper', () => {
+    // Drizzle wraps driver errors in DrizzleQueryError, which has no `code` of
+    // its own. Reading only the outermost error turned every constraint
+    // violation into a 500.
+    const wrapped = new Error('Failed query: insert into "customers" ...', {
+      cause: { code: '23505', constraint: 'customers_phone_idx' },
+    })
+
+    assert.equal(fromPostgresError(wrapped)?.code, 'RESOURCE_ALREADY_EXISTS')
+  })
+
+  it('stops walking a self-referencing cause chain', () => {
+    const looping: { code: string; cause?: unknown } = { code: 'not-a-pg-code' }
+    looping.cause = looping
+
+    assert.equal(fromPostgresError(looping), null)
+  })
+
   it('maps a broken foreign key to RESOURCE_NOT_FOUND', () => {
     assert.equal(fromPostgresError({ code: '23503' })?.code, 'RESOURCE_NOT_FOUND')
   })

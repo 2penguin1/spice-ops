@@ -7,3 +7,4 @@ dist/
 
 # Local machine overrides (port conflicts, personal settings)
 docker-compose.override.yml
+.tmp-body

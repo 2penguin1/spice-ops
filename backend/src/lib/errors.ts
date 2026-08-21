@@ -58,8 +58,7 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   order_items_unit_price_non_negative: 'unitPrice must be 0 or greater',
 }
 
-/** Translates a Postgres error into a contract error, or null if we do not recognise it. */
-export function fromPostgresError(error: unknown): ApiError | null {
+function mapConstraintViolation(error: unknown): ApiError | null {
   if (typeof error !== 'object' || error === null || !('code' in error)) return null
 
   const { code, constraint } = error as { code?: string; constraint?: string }
@@ -75,6 +74,27 @@ export function fromPostgresError(error: unknown): ApiError | null {
     default:
       return null
   }
+}
+
+/**
+ * Translates a Postgres error into a contract error, or null if we do not
+ * recognise it.
+ *
+ * Walks the `cause` chain because Drizzle wraps driver errors in its own
+ * DrizzleQueryError, which carries no `code` of its own. Reading only the
+ * outermost error turns every constraint violation into a 500.
+ */
+export function fromPostgresError(error: unknown): ApiError | null {
+  let current = error
+
+  // Bounded, so a self-referencing cause cannot spin forever.
+  for (let depth = 0; current != null && depth < 5; depth++) {
+    const mapped = mapConstraintViolation(current)
+    if (mapped) return mapped
+    current = (current as { cause?: unknown }).cause
+  }
+
+  return null
 }
 
 /**
