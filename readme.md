@@ -25,6 +25,7 @@ them, managers watch the numbers.
 - [Project layout](#project-layout)
 - [Troubleshooting](#troubleshooting)
 - [Deploying](#deploying)
+- [Photography](#photography)
 
 ---
 
@@ -634,6 +635,30 @@ docker run -p 3000:3000 \
 
 ---
 
+## Photography
+
+Every dish photograph and the landing-page header come from [Wikimedia
+Commons](https://commons.wikimedia.org). They live in `frontend/public/menu/`,
+and `credits.json` beside them records the source file and licence for each one.
+
+| Image | Photographer | Licence |
+|---|---|---|
+| Hero | [Ravichouhan208](https://commons.wikimedia.org/wiki/File:Indian_Jumbo_Platter.jpg) | CC BY-SA 4.0 |
+| Paneer butter masala | [Gannu03](https://commons.wikimedia.org/wiki/File:Paneer_butter_masala_2.jpg) | CC BY-SA 4.0 |
+| Chicken biryani | [Shivani shipra](https://commons.wikimedia.org/wiki/File:Chicken_biryani_02-06-2015_(India).jpg) | CC BY-SA 4.0 |
+| Garlic naan | [HARIOM.AWASTHI](https://commons.wikimedia.org/wiki/File:Adraki_Naan_(Garlic_Naan).JPG) | CC BY-SA 4.0 |
+| Dal makhani | [Miansari66](https://commons.wikimedia.org/wiki/File:Dal_Makhani..JPG) | CC0 |
+| Masala dosa | [Marajozkee](https://commons.wikimedia.org/wiki/File:Masala_dosa_01.jpg) | CC BY-SA 4.0 |
+| Tandoori roti | [Kamalsahansi](https://commons.wikimedia.org/wiki/File:Tandoori_Roti_in_clay_oven.JPG) | CC BY-SA 4.0 |
+| Hyderabadi haleem | [Chandu7299](https://commons.wikimedia.org/wiki/File:Haleem_hyderabadi.jpg) | CC BY-SA 4.0 |
+| Gulab jamun | [Suyash.dwivedi](https://commons.wikimedia.org/wiki/File:Two_Gulab_Jamun_in_a_plate_01.jpg) | CC BY-SA 4.0 |
+| Mango lassi | [Misaochan](https://commons.wikimedia.org/wiki/File:Mango_Lassi_.jpg) | CC BY-SA 3.0 |
+| Veg pulao | [Vardhankoshal](https://commons.wikimedia.org/wiki/File:Vegetable_Pulao_as_served_in_South_India.jpg) | CC BY-SA 4.0 |
+
+CC BY and CC BY-SA require attribution, which is what this table is. CC0 images
+need none and are listed for completeness.
+
+---
 ## Read next
 
 | Document | What it covers |

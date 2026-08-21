@@ -1,0 +1,291 @@
+/* Landing page only. Nothing here is used by the signed-in app. */
+
+.landing {
+  background: #0e1114;
+}
+
+/* ── Hero ──────────────────────────────────────────────────────────────────
+   One photograph, held back by a scrim so the name can sit on top of it. */
+
+.hero {
+  display: grid;
+  position: relative;
+  place-items: center;
+  min-height: 100svh;
+  padding: 96px 24px;
+  overflow: hidden;
+  text-align: center;
+}
+
+.hero-photo {
+  position: absolute;
+  inset: 0;
+  background: #0e1114 url('/menu/hero.jpg') center / cover no-repeat;
+  transform: scale(1.06);
+  animation: hero-settle 14s ease-out forwards;
+}
+
+/* Two scrims: one flat for legibility, one from the foot to seat the type. */
+.hero-photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgb(11 13 16 / 0.72) 0%, rgb(11 13 16 / 0.6) 40%, rgb(11 13 16 / 0.96) 100%),
+    radial-gradient(115% 80% at 50% 42%, rgb(11 13 16 / 0.15) 0%, rgb(11 13 16 / 0.75) 100%);
+}
+
+@keyframes hero-settle {
+  to {
+    transform: scale(1);
+  }
+}
+
+.hero-body {
+  position: relative;
+  max-width: 660px;
+}
+
+.hero-eyebrow,
+.hero-name,
+.hero-rule,
+.hero-line,
+.hero-cta {
+  animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.hero-eyebrow { animation-delay: 0.05s; }
+.hero-name    { animation-delay: 0.15s; }
+.hero-rule    { animation-delay: 0.3s; }
+.hero-line    { animation-delay: 0.4s; }
+.hero-cta     { animation-delay: 0.5s; }
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+.hero-eyebrow {
+  margin: 0;
+  color: var(--turmeric-soft);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+}
+
+.hero-name {
+  margin: 18px 0 0;
+  color: #fff;
+  font-size: clamp(52px, 11vw, 118px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+}
+
+.hero-rule {
+  width: 56px;
+  height: 2px;
+  margin: 30px auto;
+  background: var(--turmeric);
+}
+
+.hero-line {
+  max-width: 30ch;
+  margin: 0 auto;
+  color: rgb(255 255 255 / 0.76);
+  font-size: clamp(16px, 1.7vw, 19px);
+  line-height: 1.6;
+  text-wrap: balance;
+}
+
+.hero-cta {
+  display: inline-block;
+  margin-top: 38px;
+  padding: 13px 30px;
+  border: 1px solid rgb(255 255 255 / 0.4);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: background 0.25s, border-color 0.25s, color 0.25s;
+}
+
+.hero-cta:hover {
+  border-color: var(--turmeric);
+  background: var(--turmeric);
+  color: #10130f;
+}
+
+.hero-scroll {
+  display: grid;
+  position: absolute;
+  bottom: 34px;
+  left: 50%;
+  translate: -50% 0;
+  place-items: center;
+  width: 22px;
+  height: 36px;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  border-radius: 12px;
+}
+
+.hero-scroll span {
+  width: 3px;
+  height: 7px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.7);
+  animation: scroll-hint 1.9s ease-in-out infinite;
+}
+
+@keyframes scroll-hint {
+  0%, 100% { transform: translateY(-5px); opacity: 0; }
+  35%      { transform: translateY(0); opacity: 1; }
+  70%      { transform: translateY(5px); opacity: 0; }
+}
+
+/* ── Menu ──────────────────────────────────────────────────────────────────
+   The photographs are the content, so the type around them stays quiet. */
+
+.menu-section {
+  padding: clamp(72px, 10vw, 128px) 24px;
+  background: #f6f4f1;
+}
+
+.menu-head {
+  max-width: 1160px;
+  margin: 0 auto clamp(40px, 5vw, 64px);
+  text-align: center;
+}
+
+.menu-eyebrow {
+  margin: 0 0 12px;
+  color: #a8763a;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+
+.menu-head h2 {
+  color: #191614;
+  font-size: clamp(30px, 4.4vw, 48px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.dishes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: clamp(28px, 3.4vw, 46px);
+  max-width: 1160px;
+  margin: 0 auto;
+}
+
+.dish {
+  position: relative;
+}
+
+.dish-frame {
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  background: #e6e1da;
+}
+
+.dish-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dish:hover .dish-frame img {
+  transform: scale(1.05);
+}
+
+.dish-line {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.dish-line h3 {
+  color: #191614;
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* The dotted leader between a dish and its price, as on a printed menu. */
+.dish-line::after {
+  content: '';
+  flex: 1;
+  order: 1;
+  height: 1px;
+  margin-bottom: 4px;
+  background: repeating-linear-gradient(90deg, #c9c1b6 0 2px, transparent 2px 6px);
+}
+
+.dish-price {
+  order: 2;
+  color: #191614;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The square-and-dot mark from every menu printed in India. */
+.dish > .diet {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 20px;
+  height: 20px;
+  border-width: 2px;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.94);
+}
+
+.dish > .diet::after {
+  width: 8px;
+  height: 8px;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+
+.landing-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  max-width: 1160px;
+  padding: 34px 24px;
+  margin: 0 auto;
+  color: rgb(255 255 255 / 0.45);
+  font-size: 13px;
+}
+
+.foot-mark {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.landing-foot a {
+  color: rgb(255 255 255 / 0.7);
+  text-decoration: none;
+}
+
+.landing-foot a:hover {
+  color: #fff;
+}
