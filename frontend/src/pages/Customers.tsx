@@ -110,7 +110,7 @@ export function Customers() {
                   {customers.map((customer) => (
                     <tr key={customer.id}>
                       <td className="nowrap">{customer.name}</td>
-                      <td className="num">{customer.phone}</td>
+                      <td className="num nowrap">{customer.phone}</td>
                       <td className="muted">{customer.email ?? '—'}</td>
                       <td className="muted small nowrap">{formatWhen(customer.createdAt)}</td>
                       <td className="right">

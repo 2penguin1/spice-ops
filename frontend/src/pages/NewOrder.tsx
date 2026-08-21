@@ -6,7 +6,7 @@ import type { Customer } from '../api/types'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { useApi, useDebounced } from '../hooks/useApi'
 import { formatMoney } from '../lib/format'
-import { MENU } from '../lib/menu'
+import { MENU, photoUrl } from '../lib/menu'
 
 type Line = { itemName: string; unitPrice: number; quantity: number }
 
@@ -85,19 +85,28 @@ export function NewOrder() {
 
       {error && <ErrorBanner error={error} />}
 
-      <div className="ticket-grid">
+      <div className="split">
         <div className="panel">
           <h2>Menu</h2>
-          <div className="row">
+          <div className="menu-grid">
             {MENU.map((entry) => (
               <button
                 type="button"
                 key={entry.itemName}
-                className="btn ghost small"
+                className="menu-tile"
                 onClick={() => addLine(entry.itemName, entry.unitPrice)}
               >
-                {entry.itemName}
-                <span className="muted num">{formatMoney(entry.unitPrice)}</span>
+                <img src={photoUrl(entry.photo)} alt="" loading="lazy" />
+                <span className="menu-tile-body">
+                  <span className="menu-tile-name">{entry.itemName}</span>
+                  <span className="menu-tile-meta">
+                    <span
+                      className={`diet diet-${entry.diet}`}
+                      title={entry.diet === 'veg' ? 'Vegetarian' : 'Non-vegetarian'}
+                    />
+                    <span className="menu-tile-price">{formatMoney(entry.unitPrice)}</span>
+                  </span>
+                </span>
               </button>
             ))}
           </div>
@@ -148,7 +157,7 @@ export function NewOrder() {
           </div>
         </div>
 
-        <div>
+        <div className="stack">
           <div className="panel">
             <h2>Customer</h2>
 

@@ -1,30 +1,43 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
 /* ── Tokens ────────────────────────────────────────────────────────────────
-   Steel for the chrome, paper for a ticket, and a colour per status. */
+   Stainless steel, because that is what an Indian restaurant kitchen is made
+   of — thalis, tumblers, the pass counter. The working surface is a cool grey
+   rather than cream so the food photography is the only warm thing on screen.
+   Turmeric is the single accent and never marks a status. */
 :root {
-  --steel-900: #171b1f;
-  --steel-800: #232a30;
-  --steel-600: #4a555e;
-  --rail: #e8e4db;
-  --paper: #fbf9f4;
-  --ink: #14171a;
-  --ink-soft: #5c666e;
-  --line: #d8d2c6;
+  --steel-950: #12171c;
+  --steel-900: #171d24;
+  --steel-800: #1f2831;
+  --steel-700: #2b3742;
+  --steel-600: #3c4a57;
+  --steel-400: #7d8b97;
 
+  --floor: #e9edf0;
+  --card: #ffffff;
+  --line: #d3dade;
+  --ink: #12171c;
+  --ink-soft: #5a6b78;
+
+  --turmeric: #c8901f;
+  --turmeric-soft: #f0c469;
+
+  /* Validated for colour-blind separation — see docs/architecture.md. */
   --confirmed: #2f6bb0;
   --preparing: #c2410c;
   --ready: #157f4b;
-  /* Violet, not grey: grey sat too close to the READY green to separate at a
-     glance, and read as "missing" rather than "done". */
   --completed: #6a4c93;
   --cancelled: #a11742;
 
+  --display: 'Archivo', system-ui, sans-serif;
   --sans: 'IBM Plex Sans', system-ui, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, monospace;
 
   --gap: 20px;
-  --radius: 3px;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow: 0 1px 2px rgb(18 23 28 / 0.05), 0 0 0 1px rgb(18 23 28 / 0.02);
+  --shadow-lift: 0 10px 28px -8px rgb(18 23 28 / 0.16), 0 2px 6px -2px rgb(18 23 28 / 0.08);
 }
 
 *,
@@ -35,7 +48,7 @@
 
 body {
   margin: 0;
-  background: var(--rail);
+  background: var(--floor);
   color: var(--ink);
   font-family: var(--sans);
   font-size: 15px;
@@ -47,8 +60,9 @@ h1,
 h2,
 h3 {
   margin: 0;
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 a {
@@ -56,7 +70,7 @@ a {
 }
 
 :focus-visible {
-  outline: 2px solid var(--preparing);
+  outline: 2px solid var(--turmeric);
   outline-offset: 2px;
 }
 
@@ -67,140 +81,272 @@ a {
   }
 }
 
-/* ── Shell ─────────────────────────────────────────────────────────────── */
+/* ── Shell ─────────────────────────────────────────────────────────────────
+   Sidebar for navigation, a thin bar for context. Both stay put so the work
+   area is the only thing that scrolls. */
 
-.topbar {
+.app {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidebar {
   display: flex;
-  align-items: center;
-  gap: 28px;
-  padding: 0 24px;
-  height: 58px;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 18px 12px 12px;
+  border-right: 1px solid #000;
   background: var(--steel-900);
   color: #fff;
 }
 
 .wordmark {
-  font-family: var(--mono);
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: 0.02em;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.wordmark span {
-  color: var(--preparing);
-}
-
-.nav {
   display: flex;
-  gap: 4px;
-  flex: 1;
+  align-items: center;
+  gap: 10px;
+  margin: 0 6px 18px;
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-decoration: none;
 }
 
-.nav a {
-  padding: 6px 12px;
-  border-radius: var(--radius);
-  color: #b9c2c9;
+/* The mark is a tandoor seen from above: a ring with the fire inside it. */
+.wordmark-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--turmeric);
+  border-radius: 50%;
+}
+
+.wordmark-mark::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--turmeric);
+}
+
+.nav-label {
+  margin: 14px 8px 6px;
+  color: var(--steel-400);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.nav-item {
+  display: flex;
+  position: relative;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  color: #cbd5dc;
   font-size: 14px;
+  font-weight: 500;
   text-decoration: none;
   transition: background 0.12s, color 0.12s;
 }
 
-.nav a:hover {
+.nav-item:hover {
   background: var(--steel-800);
   color: #fff;
 }
 
-.nav a.active {
+.nav-item.active {
+  background: var(--steel-700);
+  color: #fff;
+}
+
+/* One turmeric marker, only ever on the page you are looking at. */
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 3px;
+  height: 20px;
+  border-radius: 0 2px 2px 0;
+  background: var(--turmeric);
+}
+
+.nav-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  opacity: 0.85;
+}
+
+.sidebar-foot {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--steel-700);
+}
+
+.whoami {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--steel-700);
+  color: var(--turmeric-soft);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.whoami-name {
+  display: block;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whoami-role {
+  display: block;
+  color: var(--steel-400);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.signout {
+  width: 100%;
+  padding: 7px;
+  border: 1px solid var(--steel-700);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: #cbd5dc;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.signout:hover {
   background: var(--steel-800);
   color: #fff;
 }
 
 .page {
   max-width: 1180px;
-  margin: 0 auto;
-  padding: 28px 24px 72px;
+  padding: 22px 24px 56px;
 }
 
+/* Full-bleed and sticky: the page's own title is the bar at the top of it. */
 .page-head {
   display: flex;
-  align-items: baseline;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 22px;
-  flex-wrap: wrap;
+  margin: -22px -24px 22px;
+  padding: 15px 24px;
+  border-bottom: 1px solid var(--line);
+  background: rgb(255 255 255 / 0.86);
+  backdrop-filter: saturate(180%) blur(10px);
 }
 
 .page-head h1 {
-  font-size: 24px;
+  font-size: 22px;
 }
 
 .eyebrow {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  margin-bottom: 3px;
   color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 
 /* ── Controls ──────────────────────────────────────────────────────────── */
 
 .toolbar {
   display: flex;
-  gap: 10px;
-  align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
-input,
-select,
-textarea {
-  padding: 8px 10px;
+.toolbar input,
+.toolbar select,
+.field input,
+.field select {
+  height: 36px;
+  padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--paper);
+  border-radius: var(--radius-sm);
+  background: var(--card);
   color: var(--ink);
-  font-family: var(--sans);
+  font: inherit;
   font-size: 14px;
 }
 
-input:focus,
-select:focus {
+.toolbar input:focus,
+.toolbar select:focus,
+.field input:focus,
+.field select:focus {
   border-color: var(--steel-600);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(200 144 31 / 0.18);
 }
 
 .search {
-  min-width: 260px;
   flex: 1;
-  max-width: 380px;
+  min-width: 200px;
 }
 
+/* One control, not six buttons: the pressed segment is the current filter. */
 .filters {
   display: flex;
+  gap: 2px;
+  padding: 3px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  overflow: hidden;
-  background: var(--paper);
+  background: var(--card);
 }
 
 .filters button {
-  padding: 7px 12px;
+  height: 28px;
+  padding: 0 11px;
   border: 0;
-  border-right: 1px solid var(--line);
-  background: transparent;
+  border-radius: var(--radius-sm);
+  background: none;
   color: var(--ink-soft);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   cursor: pointer;
+  transition: background 0.12s, color 0.12s;
 }
 
-.filters button:last-child {
-  border-right: 0;
+.filters button:hover {
+  background: var(--floor);
+  color: var(--ink);
 }
 
 .filters button[aria-pressed='true'] {
@@ -212,21 +358,22 @@ select:focus {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 14px;
+  height: 36px;
+  padding: 0 14px;
   border: 1px solid var(--steel-900);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   background: var(--steel-900);
   color: #fff;
-  font-family: var(--sans);
+  font: inherit;
   font-size: 14px;
   font-weight: 500;
   text-decoration: none;
   cursor: pointer;
-  transition: opacity 0.12s;
+  transition: background 0.12s;
 }
 
 .btn:hover:not(:disabled) {
-  opacity: 0.86;
+  background: var(--steel-700);
 }
 
 .btn:disabled {
@@ -234,29 +381,40 @@ select:focus {
   cursor: not-allowed;
 }
 
+/* Row actions and other in-table controls, which must not tower over a cell. */
+.btn.small {
+  height: 28px;
+  padding: 0 9px;
+  font-size: 13px;
+}
+
 .btn.ghost {
-  background: transparent;
   border-color: var(--line);
+  background: var(--card);
   color: var(--ink);
 }
 
+.btn.ghost:hover:not(:disabled) {
+  background: var(--floor);
+}
+
 .btn.danger {
-  background: transparent;
   border-color: var(--cancelled);
+  background: var(--card);
   color: var(--cancelled);
 }
 
-.btn.small {
-  padding: 5px 9px;
-  font-size: 13px;
+.btn.danger:hover:not(:disabled) {
+  background: var(--cancelled);
+  color: #fff;
 }
 
 .link-btn {
+  padding: 0;
   border: 0;
   background: none;
-  padding: 0;
-  color: var(--ink-soft);
-  font-size: 13px;
+  color: inherit;
+  font: inherit;
   text-decoration: underline;
   cursor: pointer;
 }
@@ -264,13 +422,15 @@ select:focus {
 /* ── Table ─────────────────────────────────────────────────────────────── */
 
 .card {
-  background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
 }
 
 .table-wrap {
   overflow-x: auto;
+  border-radius: var(--radius);
 }
 
 table {
@@ -280,21 +440,20 @@ table {
 }
 
 th {
-  padding: 10px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--line);
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  text-align: left;
   color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-align: left;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
 td {
-  padding: 11px 14px;
-  border-bottom: 1px solid #eee8dc;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--floor);
   vertical-align: middle;
 }
 
@@ -303,22 +462,18 @@ tbody tr:last-child td {
 }
 
 tbody tr.clickable {
+  transition: background 0.12s;
+}
+
+tbody tr.clickable:hover {
+  background: var(--floor);
   cursor: pointer;
 }
 
-/* One line, not a wrapped stack. */
-td .actions,
-td.nowrap {
-  white-space: nowrap;
-  flex-wrap: nowrap;
-}
-
-tbody tr.clickable:hover td {
-  background: #f3efe6;
-}
-
 .row-link {
-  color: inherit;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
   text-decoration: none;
 }
 
@@ -328,8 +483,8 @@ tbody tr.clickable:hover td {
 
 .num {
   font-family: var(--mono);
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .right {
@@ -344,109 +499,144 @@ tbody tr.clickable:hover td {
   font-size: 13px;
 }
 
+.nowrap {
+  white-space: nowrap;
+}
+
 /* ── Status ────────────────────────────────────────────────────────────── */
 
 .status {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  font-family: var(--mono);
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  border: 1px solid currentColor;
+  border-radius: 100px;
   font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   white-space: nowrap;
 }
 
+/* A dot as well as a colour, so the badge never relies on hue alone. */
 .status::before {
   content: '';
-  width: 3px;
-  height: 13px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   background: currentColor;
 }
 
 .status-CONFIRMED { color: var(--confirmed); }
 .status-PREPARING { color: var(--preparing); }
-.status-READY { color: var(--ready); }
+.status-READY     { color: var(--ready); }
 .status-COMPLETED { color: var(--completed); }
 .status-CANCELLED { color: var(--cancelled); }
 
-/* ── Ticket ────────────────────────────────────────────────────────────────
-   A kitchen order ticket: the number large in mono, a status stripe down the
-   spine, a perforation under the header. */
+/* ── Age rail ──────────────────────────────────────────────────────────────
+   The one number a kitchen runs on: how long has this been sitting. The bar
+   fills as an order approaches the time it should have been done in, so
+   glancing down a column finds what is late without reading any clock. */
 
-.ticket-grid,
+.rail {
+  display: flex;
+  flex: none;
+  align-items: flex-end;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.rail-fill {
+  width: 100%;
+  border-radius: 2px;
+  background: currentColor;
+  transition: height 0.6s linear;
+}
+
+.clock {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.clock.late {
+  color: var(--preparing);
+  font-weight: 600;
+}
+
+/* ── Ticket ────────────────────────────────────────────────────────────────
+   The order detail page as a printed docket: mono type, a perforated tear,
+   and a status stripe down the left edge. */
+
 .split {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
   gap: var(--gap);
   align-items: start;
 }
 
-/* A table needs more room than a ticket. */
 .split {
-  grid-template-columns: minmax(0, 2.6fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1fr) 320px;
 }
 
-/* Grid items default to min-width: auto, so a wide table would stretch its
-   column and push the page sideways. */
-.ticket-grid > *,
-.split > * {
-  min-width: 0;
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ticket {
   position: relative;
-  background: var(--paper);
+  overflow: hidden;
+  padding: 18px 20px 20px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 22px 24px 24px 30px;
-  overflow: hidden;
+  background: var(--card);
+  box-shadow: var(--shadow);
 }
 
 .ticket::before {
   content: '';
   position: absolute;
   inset: 0 auto 0 0;
-  width: 6px;
-  background: var(--spine, var(--completed));
+  width: 4px;
+  background: var(--spine, var(--line));
 }
 
 .ticket-head {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .ticket-number {
   font-family: var(--mono);
-  font-size: 30px;
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  line-height: 1.1;
 }
 
 .perforation {
-  margin: 18px 0;
-  border: 0;
-  border-top: 1px dashed var(--line);
+  height: 1px;
+  margin: 14px 0;
+  background: repeating-linear-gradient(90deg, var(--line) 0 5px, transparent 5px 10px);
 }
 
 .lines {
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
 .line {
   display: grid;
-  grid-template-columns: 3.2rem 1fr auto auto;
-  gap: 12px;
-  align-items: center;
-  padding: 7px 0;
-  border-bottom: 1px solid #efe9dd;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--floor);
 }
 
 .line:last-of-type {
@@ -459,225 +649,337 @@ tbody tr.clickable:hover td {
 }
 
 .line-unit {
+  color: var(--ink-soft);
   font-size: 12px;
 }
 
 .total-row {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
-  margin-top: 14px;
-  padding-top: 14px;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 2px solid var(--ink);
   font-family: var(--mono);
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 600;
 }
 
 /* ── Panels & forms ────────────────────────────────────────────────────── */
 
 .panel {
-  background: var(--paper);
+  padding: 18px 20px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 18px 20px;
+  background: var(--card);
+  box-shadow: var(--shadow);
 }
 
-.panel + .panel {
-  margin-top: var(--gap);
+/* A column of panels beside the main content. Gap, not margins — a margin
+   rule on adjacent panels also fires inside grids that merely contain them. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
 }
 
 .panel h2 {
+  margin-bottom: 12px;
   font-size: 13px;
-  font-family: var(--mono);
-  font-weight: 500;
-  letter-spacing: 0.1em;
+  font-weight: 600;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--ink-soft);
-  margin-bottom: 14px;
 }
 
 .field {
-  display: block;
-  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
 }
 
-.field span {
-  display: block;
-  margin-bottom: 5px;
-  font-size: 13px;
+.field > span {
   color: var(--ink-soft);
-}
-
-.field input {
-  width: 100%;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .field-error {
-  margin-top: 4px;
-  font-size: 13px;
   color: var(--cancelled);
+  font-size: 12px;
 }
 
 .row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
 .actions {
   display: flex;
-  gap: 8px;
   flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* A table row is one line of work: its buttons stay beside each other. */
+td .actions {
+  gap: 6px;
+  flex-wrap: nowrap;
 }
 
 .dl {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 6px 16px;
-  font-size: 14px;
+  gap: 8px 16px;
   margin: 0;
+  font-size: 14px;
 }
 
 .dl dt {
   color: var(--ink-soft);
+  font-size: 12px;
 }
 
 .dl dd {
   margin: 0;
 }
 
+/* ── Menu picker ───────────────────────────────────────────────────────────
+   Photographs because staff recognise a dish faster than they read its name,
+   and the veg mark because every menu printed in India carries one. */
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+}
+
+.menu-tile {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+
+.menu-tile:hover {
+  border-color: var(--steel-600);
+  box-shadow: var(--shadow-lift);
+  transform: translateY(-1px);
+}
+
+.menu-tile img {
+  width: 100%;
+  height: 92px;
+  background: var(--floor);
+  object-fit: cover;
+}
+
+.menu-tile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px 11px;
+}
+
+.menu-tile-name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.menu-tile-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.menu-tile-price {
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+/* The square-and-dot mark from every menu printed in India. */
+.diet {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+}
+
+.diet::after {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.diet-veg { color: #1e7a4d; }
+.diet-nonveg { color: #8c2f24; }
+
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
 
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: var(--gap);
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
   margin-bottom: var(--gap);
 }
 
 .tile {
-  background: var(--paper);
+  padding: 15px 17px 17px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  background: var(--card);
+  box-shadow: var(--shadow);
 }
 
-.tile p {
-  margin: 0;
+.tile .eyebrow {
+  margin-bottom: 0;
 }
 
 .tile-value {
-  font-size: 25px;
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 26px;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  margin: 4px 0 2px !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
 }
 
 .charts {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
   gap: var(--gap);
-  margin-bottom: var(--gap);
-  /* Without this a short panel stretches to match a tall neighbour, leaving a
-     block of empty paper under the table. */
-  align-items: start;
 }
 
-@media (max-width: 900px) {
-  .charts {
-    grid-template-columns: 1fr;
-  }
+.chart-panel {
+  padding: 16px 18px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
 }
 
 .chart-panel h2 {
-  margin-bottom: 2px;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  text-transform: none;
 }
 
 .chart-subtitle {
-  margin: 0 0 14px;
-}
-
-.chart-panel table {
-  margin-bottom: 12px;
-}
-
-.chart-panel th,
-.chart-panel td {
-  padding-left: 0;
+  margin: 2px 0 12px;
+  color: var(--ink-soft);
+  font-size: 12px;
 }
 
 /* ── AI reading ────────────────────────────────────────────────────────── */
 
 .insight {
-  border-left: 4px solid var(--preparing);
+  padding: 16px 18px;
   margin-bottom: var(--gap);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--turmeric);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
 }
 
-.insight-body p {
-  margin: 0 0 8px;
-  padding-left: 16px;
-  position: relative;
+/* Marks a heading whose content was written by a model, not measured. */
+.chip {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 100px;
+  background: var(--turmeric);
+  color: #1a1408;
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  vertical-align: 3px;
 }
 
-.insight-body p::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 9px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--preparing);
+.insight-body {
+  max-width: 92ch;
+  margin: 6px 0 0;
+  font-size: 14px;
+  white-space: pre-wrap;
 }
 
 .insight-note {
   margin: 12px 0 0;
-  padding-top: 10px;
-  border-top: 1px dashed var(--line);
+  color: var(--ink-soft);
+  font-size: 12px;
 }
 
-/* ── Kitchen board ──────────────────────────────────────────────────────── */
+/* ── Kitchen board ─────────────────────────────────────────────────────── */
 
 .board {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--gap);
-  align-items: start;
+  gap: 14px;
 }
 
-.board-column > header {
+@media (max-width: 900px) {
+  .board {
+    grid-template-columns: 1fr;
+  }
+}
+
+.board-column header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--line);
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .board-hint {
-  margin: 8px 0 12px;
+  margin-bottom: 14px;
+  color: var(--ink-soft);
+  font-size: 13px;
 }
 
 .board-empty {
-  padding: 18px 0;
+  padding: 22px 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--ink-soft);
+  font-size: 13px;
+  text-align: center;
 }
 
 .ticket-card {
-  position: relative;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--completed);
-  border-radius: var(--radius);
+  display: flex;
+  gap: 12px;
   padding: 12px 14px;
   margin-bottom: 10px;
-  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
 }
 
-/* Set per status, not currentColor: every child would inherit it, including
-   the button label. */
-.ticket-card.status-CONFIRMED { border-left-color: var(--confirmed); }
-.ticket-card.status-PREPARING { border-left-color: var(--preparing); }
-.ticket-card.status-READY { border-left-color: var(--ready); }
+.ticket-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
 
 .ticket-card-head {
   display: flex;
@@ -687,6 +989,8 @@ tbody tr.clickable:hover td {
 }
 
 .ticket-card-number {
+  font-family: var(--mono);
+  font-size: 15px;
   font-weight: 600;
   text-decoration: none;
 }
@@ -695,201 +999,167 @@ tbody tr.clickable:hover td {
   text-decoration: underline;
 }
 
-.ticket-card p {
-  margin: 2px 0 8px;
-}
-
 .ticket-card-items {
-  list-style: none;
-  margin: 0 0 12px;
+  margin: 0;
   padding: 0;
-  font-size: 14px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  list-style: none;
 }
 
 .ticket-card-items li {
-  padding: 1px 0;
-}
-
-@media (max-width: 900px) {
-  .board {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ── Sign in ───────────────────────────────────────────────────────────── */
-
-.signin {
-  display: grid;
-  place-items: center;
-  min-height: 100vh;
-  padding: 24px;
-}
-
-.signin-card {
-  width: 100%;
-  max-width: 420px;
-}
-
-.signin-card h1 {
-  font-size: 26px;
-  margin-bottom: 4px;
-}
-
-.signin-card .field {
-  margin-top: 14px;
-}
-
-.demo-accounts {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-  font-size: 13px;
-}
-
-.demo-accounts li {
-  padding: 3px 0;
-}
-
-.whoami {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: #b9c2c9;
-}
-
-.whoami .link-btn {
-  color: #b9c2c9;
-}
-
-.role-chip {
-  padding: 2px 7px;
-  border: 1px solid #3d474f;
-  border-radius: var(--radius);
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  color: #e6e2d8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Timeline ──────────────────────────────────────────────────────────── */
 
 .timeline {
-  list-style: none;
   margin: 0;
   padding: 0;
+  list-style: none;
 }
 
 .timeline-entry {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+  display: grid;
+  position: relative;
+  grid-template-columns: auto 1fr;
   gap: 12px;
-  padding: 8px 0 8px 14px;
-  border-left: 2px solid currentColor;
-  margin-left: 3px;
+  margin-left: 5px;
+  padding-left: 16px;
+  padding-bottom: 14px;
+  border-left: 1px solid var(--line);
+}
+
+.timeline-entry::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .timeline-entry:last-child {
   padding-bottom: 0;
+  border-left-color: transparent;
 }
 
 .timeline-status {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.timeline-entry time,
-.timeline-entry .muted {
-  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
 }
 
 /* ── States ────────────────────────────────────────────────────────────── */
 
 .banner {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  margin-bottom: 16px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  margin-bottom: 14px;
   border: 1px solid var(--cancelled);
-  border-left-width: 4px;
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   background: #fdf2f5;
-  color: #7c1130;
+  color: var(--cancelled);
   font-size: 14px;
 }
 
-.banner code {
-  font-family: var(--mono);
-  font-size: 12px;
-  opacity: 0.8;
-}
-
 .empty {
-  padding: 44px 20px;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 20px;
   color: var(--ink-soft);
-}
-
-.empty p {
-  margin: 0 0 14px;
+  text-align: center;
 }
 
 .skeleton {
-  height: 13px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #ece7dc 25%, #f5f1e8 50%, #ece7dc 75%);
-  background-size: 300% 100%;
-  animation: shimmer 1.3s ease-in-out infinite;
+  height: 14px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--floor) 25%, #dfe5e9 50%, var(--floor) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s infinite;
 }
 
 @keyframes shimmer {
-  from { background-position: 100% 0; }
-  to { background-position: -100% 0; }
+  to {
+    background-position: -200% 0;
+  }
 }
 
 .pagination {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 10px;
   margin-top: 14px;
   font-size: 13px;
+}
+
+.pages {
   color: var(--ink-soft);
-  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 12px;
 }
 
-.pagination .pages {
-  display: flex;
-  gap: 6px;
-  align-items: center;
+/* ── Sign in ───────────────────────────────────────────────────────────── */
+
+/* The same photograph as the landing page, pushed well back. Staff arrive
+   here from there, and a flat panel on black looked like a different product. */
+.signin {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px;
+  background:
+    linear-gradient(rgb(11 13 16 / 0.9), rgb(11 13 16 / 0.9)),
+    #0b0d10 url('/menu/hero.jpg') center / cover no-repeat;
 }
 
-@media (max-width: 1080px) {
-  .split {
-    grid-template-columns: 1fr;
-  }
+.signin-card {
+  width: 100%;
+  max-width: 380px;
+  padding: 30px;
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.55);
 }
 
-@media (max-width: 860px) {
-  .ticket-grid {
-    grid-template-columns: 1fr;
-  }
+.signin-card h1 {
+  margin-bottom: 4px;
+  font-size: 20px;
 }
 
-@media (max-width: 620px) {
-  .topbar {
-    height: auto;
-    padding: 10px 14px;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
+.demo-accounts {
+  margin-top: 20px;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  list-style: none;
+}
 
-  .page {
-    padding: 20px 14px 56px;
-  }
+.demo-accounts li + li {
+  margin-top: 7px;
+}
+
+.demo-accounts button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--confirmed);
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.demo-accounts button:hover {
+  text-decoration: underline;
 }

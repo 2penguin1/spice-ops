@@ -86,7 +86,7 @@ export function OrderDetail() {
 
       {actionError && <ErrorBanner error={actionError} />}
 
-      <div className="ticket-grid">
+      <div className="split">
         <div className="ticket" style={{ ['--spine' as string]: SPINE[current.status] }}>
           <div className="ticket-head">
             <div>
@@ -141,7 +141,7 @@ export function OrderDetail() {
           </div>
         </div>
 
-        <div>
+        <div className="stack">
           <div className="panel">
             <h2>Move this order on</h2>
             {moves.length === 0 ? (

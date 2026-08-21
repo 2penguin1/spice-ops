@@ -7,15 +7,15 @@ import { ErrorBanner } from '../components/ErrorBanner'
 import { useApi } from '../hooks/useApi'
 import { useOrderStream } from '../hooks/useOrderStream'
 import { useAuth } from '../lib/auth'
-import { formatAge } from '../lib/format'
+import { AgeRail, Clock } from '../components/AgeRail'
 import { canSetStatus } from '../lib/permissions'
 import { ACTION_LABEL } from '../lib/status'
 
 /** Completed and cancelled orders leave the board: it shows work outstanding. */
 const COLUMNS: { status: OrderStatus; title: string; hint: string; action?: OrderStatus }[] = [
-  { status: 'CONFIRMED', title: 'Waiting', hint: 'Ordered, not started', action: 'PREPARING' },
-  { status: 'PREPARING', title: 'Cooking', hint: 'On the pass', action: 'READY' },
-  { status: 'READY', title: 'Ready', hint: 'Waiting to be taken out', action: 'COMPLETED' },
+  { status: 'CONFIRMED', title: 'Waiting', hint: 'Ordered, not started · target 5 min', action: 'PREPARING' },
+  { status: 'PREPARING', title: 'Cooking', hint: 'With a cook · target 20 min', action: 'READY' },
+  { status: 'READY', title: 'Ready', hint: 'At the pass · target 10 min', action: 'COMPLETED' },
 ]
 
 export function Kitchen() {
@@ -88,33 +88,37 @@ export function Kitchen() {
 
               {orders.map((order) => (
                 <article className={`ticket-card status-${order.status}`} key={order.id}>
-                  <div className="ticket-card-head">
-                    <Link className="num ticket-card-number" to={`/orders/${order.id}`}>
-                      {order.orderNumber}
-                    </Link>
-                    <span className="muted small">{formatAge(order.createdAt)}</span>
+                  <AgeRail since={order.updatedAt} status={order.status} />
+
+                  <div className="ticket-card-body">
+                    <div className="ticket-card-head">
+                      <Link className="num ticket-card-number" to={`/orders/${order.id}`}>
+                        {order.orderNumber}
+                      </Link>
+                      <Clock since={order.updatedAt} status={order.status} />
+                    </div>
+
+                    <p className="muted small">{order.customer.name}</p>
+
+                    <ul className="ticket-card-items">
+                      {order.items.map((item) => (
+                        <li key={item.id}>
+                          <span className="num">{item.quantity}×</span> {item.itemName}
+                        </li>
+                      ))}
+                      {order.items.length === 0 && <li className="muted">No items</li>}
+                    </ul>
+
+                    {column.action && mayAct && (
+                      <button
+                        className="btn small"
+                        disabled={busyId === order.id}
+                        onClick={() => advance(order, column.action!)}
+                      >
+                        {ACTION_LABEL[column.action]}
+                      </button>
+                    )}
                   </div>
-
-                  <p className="muted small">{order.customer.name}</p>
-
-                  <ul className="ticket-card-items">
-                    {order.items.map((item) => (
-                      <li key={item.id}>
-                        <span className="num">{item.quantity}×</span> {item.itemName}
-                      </li>
-                    ))}
-                    {order.items.length === 0 && <li className="muted">No items</li>}
-                  </ul>
-
-                  {column.action && mayAct && (
-                    <button
-                      className="btn small"
-                      disabled={busyId === order.id}
-                      onClick={() => advance(order, column.action!)}
-                    >
-                      {ACTION_LABEL[column.action]}
-                    </button>
-                  )}
                 </article>
               ))}
             </section>

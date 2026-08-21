@@ -81,7 +81,9 @@ export function Dashboard() {
       {/* No key, no panel — never an error where the numbers should be. */}
       {insights.data?.narrative && (
         <section className="panel insight">
-          <h2>What the numbers say</h2>
+          <h2>
+            What the numbers say <span className="chip">AI</span>
+          </h2>
           <div className="insight-body">
             {insights.data.narrative
               .split(/\r?\n/)
@@ -91,10 +93,7 @@ export function Dashboard() {
                 <p key={line}>{line}</p>
               ))}
           </div>
-          <p className="muted small insight-note">
-            Written by {insights.data.model} from the aggregate figures on this page. No customer
-            or staff details are sent.
-          </p>
+          <p className="insight-note">Read from the totals above. No customer or staff records leave the building.</p>
         </section>
       )}
 

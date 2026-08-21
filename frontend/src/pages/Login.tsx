@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { ApiError } from '../api/client'
 import { useAuth } from '../lib/auth'
@@ -32,7 +33,9 @@ export function Login() {
   return (
     <div className="signin">
       <form className="panel signin-card" onSubmit={submit}>
-        <p className="eyebrow">Spice Garden</p>
+        <Link className="eyebrow" to="/" style={{ display: 'block', textDecoration: 'none' }}>
+          ← Spice Garden
+        </Link>
         <h1>Sign in</h1>
         <p className="muted small">Order management for staff on shift.</p>
 
