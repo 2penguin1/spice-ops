@@ -37,8 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStaff(null)
   }, [])
 
-  // The API tells us when a token has expired mid-session, rather than the app
-  // discovering it as a broken screen.
+  // The API raises this when a token expires mid-session.
   useEffect(() => {
     window.addEventListener('spice:unauthorized', signOut)
     return () => window.removeEventListener('spice:unauthorized', signOut)

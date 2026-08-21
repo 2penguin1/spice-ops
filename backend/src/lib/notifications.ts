@@ -8,26 +8,18 @@ import type { Tx } from './orders.tx.ts'
 import type { OrderStatus } from './status.ts'
 
 /**
- * Telling a customer their order is ready, without letting that get in the way
- * of the order itself.
+ * Customer messages, sent through a transactional outbox.
  *
- * The pattern is a transactional outbox. The intent to send is written in the
- * same transaction as the status change, so a crash between committing the
- * change and dispatching the message cannot lose it. A loop drains the table
- * afterwards.
- *
- * There is no BullMQ. A queue earns its place by absorbing load and retrying
- * slow external calls — but the outbox is needed for correctness whatever else
- * we do, and draining it gives exactly those two properties. A job queue in
- * front of it would be a second queue doing the first one's work.
+ * The row goes in with the status change that caused it, so a crash between
+ * committing the change and sending the message cannot lose it. This loop
+ * drains the table afterwards and retries what fails.
  */
 
 const MAX_ATTEMPTS = 3
 const DRAIN_INTERVAL_MS = 5000
 const BATCH = 20
 
-// Not every step is worth a message. Nobody wants a text saying their food has
-// started cooking.
+// Only the steps a customer cares about.
 const MESSAGES: Partial<Record<OrderStatus, (orderNumber: string) => string>> = {
   CONFIRMED: (n) => `Spice Garden: we have your order ${n}. We will let you know when it is ready.`,
   READY: (n) => `Spice Garden: order ${n} is ready.`,
@@ -41,7 +33,7 @@ type Message = { recipient: string; body: string }
 type Driver = { name: string; send: (message: Message) => Promise<void> }
 
 const drivers: Record<string, Driver> = {
-  /** The default. Demonstrable with no account, no key and no network. */
+  /** The default. Works with no account and no network. */
   console: {
     name: 'console',
     async send({ recipient, body }) {
@@ -49,11 +41,7 @@ const drivers: Record<string, Driver> = {
     },
   },
 
-  /**
-   * Posts to any URL — a Slack incoming webhook, an automation tool, or a real
-   * SMS gateway's HTTP endpoint. A second implementation that can actually be
-   * tested, unlike a Twilio driver nobody here has credentials for.
-   */
+  /** Posts to any URL: a Slack webhook, an automation tool, an SMS gateway. */
   webhook: {
     name: 'webhook',
     async send({ recipient, body }) {
@@ -75,7 +63,7 @@ const driver = drivers[config.NOTIFY_DRIVER] ?? drivers.console!
 
 // ─── Writing ─────────────────────────────────────────────────────────────────
 
-/** Queues a message inside the caller's transaction. Never sends anything itself. */
+/** Queues a message in the caller's transaction. Sends nothing itself. */
 export function queueNotification(
   tx: Tx,
   order: { orderId: string; orderNumber: string; status: OrderStatus; phone: string },
@@ -96,10 +84,8 @@ export function queueNotification(
 type Claimed = { id: string; recipient: string; body: string; attempts: number }
 
 /**
- * Takes a batch of messages in one statement.
- *
- * SKIP LOCKED lets a second worker step over rows this one is already holding,
- * so two workers never send the same message and neither waits on the other.
+ * Takes a batch in one statement. SKIP LOCKED lets a second worker step over
+ * rows this one holds, so neither waits and no message is sent twice.
  */
 async function claimBatch(): Promise<Claimed[]> {
   const { rows } = await db.execute(sql`
@@ -138,7 +124,6 @@ async function drainOnce(): Promise<{ sent: number; failed: number }> {
       const reason = (error as Error).message
       const exhausted = message.attempts >= MAX_ATTEMPTS
 
-      // Back to PENDING for another go, or FAILED with the reason recorded.
       await db
         .update(notifications)
         .set({ status: exhausted ? 'FAILED' : 'PENDING', lastError: reason })
@@ -152,10 +137,10 @@ async function drainOnce(): Promise<{ sent: number; failed: number }> {
 }
 
 /**
- * Frees messages left in SENDING by a process that died mid-send.
+ * Frees messages stuck in SENDING by a process that died mid-send.
  *
- * Compares claimed_at, not created_at: an old message being sent right now has
- * an old created_at, and resetting it would send the customer a second copy.
+ * Compares claimed_at, not created_at. An old message being sent right now has
+ * an old created_at, and resetting it would send a second copy.
  */
 async function recoverStuck() {
   const cutoff = new Date(Date.now() - 60_000)
@@ -175,8 +160,8 @@ export function startNotificationWorker() {
   console.log(`Notifications: ${driver.name} driver, draining every ${DRAIN_INTERVAL_MS / 1000}s`)
 
   timer = setInterval(async () => {
-    // A slow provider can make one cycle outlast the interval. Without this
-    // the cycles pile up and race each other over the same rows.
+    // A slow provider can make a cycle outlast the interval, and overlapping
+    // cycles race over the same rows.
     if (draining) return
     draining = true
 
@@ -191,7 +176,7 @@ export function startNotificationWorker() {
     }
   }, DRAIN_INTERVAL_MS)
 
-  // The drain alone must not hold the process open at shutdown.
+  // Must not hold the process open at shutdown.
   timer.unref()
 }
 

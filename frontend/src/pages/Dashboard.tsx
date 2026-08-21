@@ -19,12 +19,9 @@ import { useOrderStream } from '../hooks/useOrderStream'
 import { formatMoney } from '../lib/format'
 
 /**
- * Literal hex, not var(--confirmed).
- *
- * Recharts writes these into SVG presentation attributes, and var() is only
- * resolved in CSS properties — as an attribute it silently yields no paint, so
- * the bars render invisibly. Same five values as the stylesheet, and the same
- * five the palette validator was run against.
+ * Literal hex, not var(--confirmed): Recharts writes these into SVG
+ * presentation attributes, where var() resolves to nothing and the mark simply
+ * does not paint. Same five values as the stylesheet.
  */
 const STATUS_COLOR: Record<OrderStatus, string> = {
   CONFIRMED: '#2f6bb0',
@@ -57,11 +54,10 @@ export function Dashboard() {
   const hours = useApi(() => api.analytics.hours(), [])
   const staff = useApi(() => api.analytics.staff(), [])
   const items = useApi(() => api.analytics.items(), [])
-  // Not reloaded on the event stream: it costs a model call, and the reading
-  // does not change because one order moved.
+  // Not reloaded on the stream: it costs a model call, and the reading does
+  // not change because one order moved.
   const insights = useApi(() => api.analytics.insights(), [])
 
-  // Numbers move as service happens.
   useOrderStream(() => {
     summary.reload()
     daily.reload()
@@ -82,8 +78,7 @@ export function Dashboard() {
 
       {error && <ErrorBanner error={error} onRetry={summary.reload} />}
 
-      {/* Hidden entirely when there is no narrative. A reviewer without an API
-          key sees the numbers and one fewer panel, never an error. */}
+      {/* No key, no panel — never an error where the numbers should be. */}
       {insights.data?.narrative && (
         <section className="panel insight">
           <h2>What the numbers say</h2>
@@ -123,9 +118,8 @@ export function Dashboard() {
         />
       </div>
 
-      {/* Orders and revenue are different scales, so they get their own axes in
-          their own charts. One chart with two y-axes would let the lines cross
-          wherever the scales happened to put them, which means nothing. */}
+      {/* Separate charts, not two y-axes on one: a dual axis lets the lines
+          cross wherever the scales happen to put them. */}
       <div className="charts">
         <Panel title="Orders per day" subtitle="Last 14 days, excluding cancelled">
           <ResponsiveContainer width="100%" height={200}>
@@ -183,7 +177,6 @@ export function Dashboard() {
                 labelFormatter={(hour) => `${hour}:00 – ${Number(hour) + 1}:00`}
                 formatter={(value) => [Number(value), 'orders']}
               />
-              {/* 2px surface gap between adjacent bars, rounded data-end. */}
               <Bar dataKey="orders" fill={SERIES} radius={[4, 4, 0, 0]} barSize={14} />
             </BarChart>
           </ResponsiveContainer>
@@ -198,7 +191,7 @@ export function Dashboard() {
             >
               <CartesianGrid stroke={GRID} strokeDasharray="2 4" horizontal={false} />
               <XAxis type="number" allowDecimals={false} {...axis} />
-              {/* Named on the axis, so status is never carried by colour alone. */}
+              {/* Named on the axis, so status never depends on colour alone. */}
               <YAxis type="category" dataKey="status" width={86} {...axis} />
               <Tooltip contentStyle={tooltipStyle} formatter={(value) => [Number(value), 'orders']} />
               <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={16}>
@@ -241,9 +234,7 @@ export function Dashboard() {
             </tbody>
           </table>
           <p className="muted small" style={{ marginBottom: 0 }}>
-            Counts what each cook actually did. Not a utilization percentage — that
-            needs a shift schedule kept accurate, and a number about a person is worse
-            than none if its denominator is stale.
+            Orders each person started and finished, and how long they took.
           </p>
         </Panel>
 

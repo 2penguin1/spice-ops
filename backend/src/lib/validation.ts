@@ -38,12 +38,11 @@ function formatIssues(issues: readonly { path: PropertyKey[]; message: string }[
 }
 
 /**
- * Validation happens here, in the route definition, so handlers can assume
- * their input is already valid.
+ * Validates at the route definition, so handlers can assume good input.
  *
- * The error code is a parameter because the contract uses different ones for
- * the same kind of failure: a bad body is VALIDATION_FAILED, a bad query
- * parameter is INVALID_FILTER, and a malformed path id means the resource
+ * The error code is a parameter because the same kind of failure has different
+ * names depending on where it came from: a bad body is VALIDATION_FAILED, a bad
+ * query parameter is INVALID_FILTER, and a malformed path id means the resource
  * cannot exist, so it is RESOURCE_NOT_FOUND.
  */
 export const validate = <Target extends keyof ValidationTargets, Schema extends ZodType>(
@@ -60,10 +59,7 @@ export function toLimitOffset({ page, size }: Pagination) {
   return { limit: size, offset: (page - 1) * size }
 }
 
-/**
- * The `meta.pagination` block. A page past the end returns an empty array with
- * correct meta rather than a 404 — see questions.md §3.
- */
+/** A page past the end returns an empty array with correct totals, not a 404. */
 export function paginationMeta({ page, size }: Pagination, total: number) {
   return {
     pagination: { page, size, total, totalPages: Math.ceil(total / size) },

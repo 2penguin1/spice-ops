@@ -8,22 +8,12 @@ import { ApiError, fromPostgresError } from './errors.ts'
 import type { Tx } from './orders.tx.ts'
 
 /**
- * Makes a retried request safe.
- *
- * Restaurant wifi drops mid-request. The client cannot tell a lost response
- * from a lost request, so it retries — and without this that retry becomes a
+ * Makes a retried POST /orders safe, so a dropped connection does not become a
  * second order for the same food.
  *
- * The mechanism is the unique primary key, not a lock or a Redis entry:
- *
- *   1. The key row is inserted inside the same transaction as the order, so
- *      the two commit together or not at all.
- *   2. A second request with the same key BLOCKS on that primary key until the
- *      first transaction finishes — Postgres does that for us, for exactly the
- *      right duration.
- *   3. It then fails with 23505, reads the stored response, and replays it.
- *
- * No polling, no state column, no distributed lock.
+ * The unique primary key does the work. The key row is written in the same
+ * transaction as the order, so a concurrent retry blocks on it until that
+ * transaction ends, then fails with 23505 and replays the stored response.
  */
 
 const hashOf = (body: unknown) => createHash('sha256').update(JSON.stringify(body)).digest('hex')
@@ -46,8 +36,8 @@ function asReplay(
   // Claimed but not yet finished: the first request is still running.
   if (existing.statusCode === 0) return null
 
-  // Same key, different request: the client has a bug, and replaying the old
-  // response would hide it while quietly dropping the new order.
+  // Same key, different request. Replaying would hide the caller's bug and
+  // silently drop this order.
   if (existing.endpoint !== endpoint || existing.requestHash !== hashOf(body)) {
     throw ApiError.validation(
       'This Idempotency-Key was already used for a different request. Use a new key.',
@@ -58,11 +48,8 @@ function asReplay(
 }
 
 /**
- * Takes the key before any of the work happens.
- *
- * A concurrent request with the same key blocks here, on the primary key,
- * rather than after inserting a duplicate order and rolling it back.
- * statusCode 0 marks it as in progress until `recordResponse` fills it in.
+ * Takes the key before the work starts, so a concurrent retry blocks here
+ * instead of building a duplicate order first. statusCode 0 means in progress.
  */
 export function claimKey(tx: Tx, entry: { key: string; endpoint: string; body: unknown }) {
   return tx.insert(idempotencyKeys).values({
@@ -83,12 +70,9 @@ export function recordResponse(tx: Tx, key: string, statusCode: number, response
 }
 
 /**
-  * True only for the unique violation on the key itself.
-  *
-  * Checks the constraint name, not just the SQLSTATE: a duplicate phone raises
-  * the same 23505 from inside the same transaction, and treating that as a
-  * replay would return someone else's order.
-  */
+ * True only for a violation of the key itself. A duplicate phone raises the
+ * same 23505, and treating that as a replay would return someone else's order.
+ */
 export function isDuplicateKey(error: unknown): boolean {
   if (fromPostgresError(error)?.code !== 'RESOURCE_ALREADY_EXISTS') return false
 
@@ -98,10 +82,7 @@ export function isDuplicateKey(error: unknown): boolean {
   return name.includes('idempotency_keys')
 }
 
-/**
- * Postgres has no row expiry, so "TTL" is a delete. Run alongside the
- * notification drain rather than as its own schedule.
- */
+/** Postgres has no row expiry, so old keys are deleted by the drain loop. */
 export async function prune() {
   await db.execute(sql`DELETE FROM idempotency_keys WHERE created_at < now() - interval '24 hours'`)
 }

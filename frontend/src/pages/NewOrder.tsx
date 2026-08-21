@@ -21,7 +21,7 @@ export function NewOrder() {
   const [saving, setSaving] = useState(false)
 
   const debounced = useDebounced(lookup)
-  const { data: matches } = useApi(
+  const { data: matches, error: lookupError } = useApi(
     () => (debounced ? api.customers.list({ search: debounced, size: 5 }) : Promise.resolve(null)),
     [debounced],
   )
@@ -116,7 +116,9 @@ export function NewOrder() {
                     min={0}
                     value={line.quantity}
                     aria-label={`Quantity of ${line.itemName}`}
-                    onChange={(event) => setQuantity(line.itemName, Number(event.target.value))}
+                    onChange={(event) =>
+                      setQuantity(line.itemName, event.target.value === '' ? 1 : Number(event.target.value))
+                    }
                     style={{ width: '3.2rem' }}
                   />
                   <span>
@@ -194,7 +196,9 @@ export function NewOrder() {
                   </div>
                 )}
 
-                {debounced && matches?.data.length === 0 && (
+                {lookupError && <ErrorBanner error={lookupError} />}
+
+                {debounced && !lookupError && matches?.data.length === 0 && (
                   <p className="muted small">
                     Nobody matches “{debounced}”. Enter their details below and they will be added.
                   </p>

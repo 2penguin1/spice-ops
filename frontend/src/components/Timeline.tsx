@@ -1,22 +1,19 @@
 import { api } from '../api/client'
 import type { OrderStatus } from '../api/types'
+import { ErrorBanner } from './ErrorBanner'
 import { useApi } from '../hooks/useApi'
 import { formatWhen } from '../lib/format'
 
-/**
- * Everything that has happened to this order.
- *
- * Reloads whenever the order's status changes, so an advance made on this page
- * appears here without a manual refresh.
- */
+/** Reloads on a status change, so an advance made here shows up immediately. */
 export function Timeline({ orderId, status }: { orderId: string; status: OrderStatus }) {
-  const { data, loading } = useApi(() => api.orders.timeline(orderId), [orderId, status])
+  const { data, error, loading } = useApi(() => api.orders.timeline(orderId), [orderId, status])
 
   return (
     <div className="panel">
       <h2>History</h2>
 
       {loading && !data && <div className="skeleton" style={{ width: '70%' }} />}
+      {error && <ErrorBanner error={error} />}
 
       {data && (
         <ol className="timeline">

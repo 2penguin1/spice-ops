@@ -3,14 +3,10 @@ import { Redis } from 'ioredis'
 import { config } from '../config.ts'
 
 /**
- * Caches the analytics aggregates, and nothing else.
+ * Caches the analytics aggregates. Nothing else is cached — order lists change
+ * on every status tap and are already pushed live.
  *
- * Order lists are deliberately not cached: they change on every status tap and
- * are already pushed live over the event stream, so a cache there would spend
- * all its effort on invalidation to make the app less current. Aggregates are
- * the opposite — nobody makes a decision on revenue that is 30 seconds stale.
- *
- * Without Redis every call simply runs the query. That is the whole fallback.
+ * Without Redis, every call just runs the query.
  */
 const client = config.REDIS_URL ? new Redis(config.REDIS_URL, { maxRetriesPerRequest: 1 }) : null
 
@@ -20,11 +16,8 @@ const VERSION_KEY = 'analytics:version'
 
 
 /**
- * Invalidation by version, not by deletion.
- *
- * Deleting keys by pattern is O(keyspace) and needs SCAN. Bumping a counter
- * that forms part of every key retires the whole set at once, and the old
- * entries expire on their own TTL.
+ * Retires every cached key at once by bumping a counter that is part of each
+ * key name. Deleting by pattern would need SCAN over the whole keyspace.
  */
 export async function invalidateAnalytics() {
   if (!client) return
@@ -36,10 +29,7 @@ export async function invalidateAnalytics() {
   }
 }
 
-/**
- * Read every time, never remembered: a second API process bumps this key, and
- * a remembered value would keep serving what that process just invalidated.
- */
+// Read every time. Remembering it would miss another process's invalidation.
 async function currentVersion(): Promise<string> {
   return String((await client!.get(VERSION_KEY)) ?? '1')
 }

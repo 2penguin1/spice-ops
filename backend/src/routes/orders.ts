@@ -28,9 +28,8 @@ import {
 const listQuery = paginationQuery.extend({
   search: searchTerm,
   status: orderStatusSchema.optional(),
-  // Not validated as a uuid here: the contract's only listed error for this
-  // parameter is RESOURCE_NOT_FOUND, and an id that cannot name a customer is
-  // a customer that does not exist. Checked in the handler.
+  // Checked in the handler, not here: an unusable id and an unknown customer
+  // are the same answer, and a bare eq() on a malformed uuid raises 22P02.
   customerId: z.string().trim().min(1).optional(),
 })
 
@@ -86,13 +85,9 @@ type CustomerInput = z.infer<typeof createOrderBody>['customer']
 /**
  * Attaches the order to an existing customer, or creates one.
  *
- * When an id is given the other fields are ignored rather than applied as an
- * update — a typo at the counter must not overwrite a good record.
- *
- * When only details are given and the phone is already on file, we reuse that
- * customer. Taking an order should not fail because someone came back a second
- * time, and the contract lists no RESOURCE_ALREADY_EXISTS for order creation.
- * See questions.md §1.4.
+ * With an id, the other fields are ignored: a typo at the counter must not
+ * overwrite a good record. Without one, a phone already on file reuses that
+ * customer, because taking an order should not fail for a returning diner.
  */
 async function resolveCustomer(tx: Tx, input: CustomerInput): Promise<string> {
   if (input.id) {
@@ -121,8 +116,7 @@ async function resolveCustomer(tx: Tx, input: CustomerInput): Promise<string> {
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
-// Reading is open to any signed-in role; the guards below cover the actions
-// that change something.
+// Any signed-in role can read. The guards cover what changes something.
 export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
 
   /** GET /orders — paginated list with search, status and customer filters. */
@@ -151,8 +145,8 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
         .from(orders)
         .innerJoin(customers, eq(customers.id, orders.customerId))
         .where(where)
-        // orderNumber breaks ties: without a unique tiebreaker, two orders
-        // sharing a timestamp can repeat or vanish across page boundaries.
+        // orderNumber breaks ties: two orders sharing a timestamp can otherwise
+        // repeat or vanish across a page boundary.
         .orderBy(desc(orders.createdAt), desc(orders.orderNumber))
         .limit(limit)
         .offset(offset),
@@ -178,7 +172,6 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
   .post('/', requireRole('ADMIN', 'MANAGER', 'SERVICE'), validate('json', createOrderBody), async (c) => {
     const body = c.req.valid('json')
 
-    // Optional. Absent, nothing about this endpoint changes.
     const key = z.string().min(1).max(200).safeParse(c.req.header('Idempotency-Key')).data
 
     if (key) {
@@ -186,7 +179,7 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
       if (replay) return c.json(replay.body as object, replay.statusCode as 201)
     }
 
-    // One transaction: a half-written order with no items must never exist.
+    // One transaction: an order without its items must never exist.
     const created = await db.transaction(async (tx) => {
       // Taken before any work, so a concurrent retry waits here rather than
       // building a duplicate order and rolling it back.
@@ -201,17 +194,17 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
           orderId: order!.id,
           itemName: item.itemName,
           quantity: item.quantity,
-          // numeric is passed as a string: sending a float would reintroduce
-          // the precision loss the column type exists to avoid.
+          // A string, not a float: numeric exists to avoid exactly the
+          // precision loss a float would reintroduce.
           unitPrice: item.unitPrice.toFixed(2),
         })),
       )
 
-      // The order came from nowhere, so this event has no previous status.
+      // The order came from nowhere, so there is no previous status.
       await recordEvent(tx, { orderId: order!.id, from: null, to: 'CONFIRMED' })
 
-      // Read back inside the transaction, so the response we store under the
-      // idempotency key is byte for byte the one we are about to return.
+      // Read back in the transaction, so what gets stored under the key is
+      // exactly what is returned.
       const detail = await loadOrderDetail(order!.id, tx)
 
       await queueNotification(tx, {
@@ -258,8 +251,6 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
       const staff = c.get('staff')
       const { status } = c.req.valid('json')
 
-      // Who may make this move depends on the status being requested, so the
-      // check lives with the other authorization rules, not in this handler.
       assertCanSetStatus(staff, status)
 
       const order = await transitionOrder(c.req.valid('param').id, status, attributableId(staff))
@@ -299,7 +290,7 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
       const { id } = c.req.valid('param')
       const item = c.req.valid('json')
 
-      // Loaded first so an unknown order is a 404 rather than a foreign key error.
+      // Loaded first, so an unknown order is a 404 and not a foreign key error.
       await loadOrderDetail(id)
 
       await db.insert(orderItems).values({
@@ -319,7 +310,7 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
     },
   )
 
-  /** DELETE /orders/{order_id}/items/{item_id} — 200 with the order, not 204. */
+  /** DELETE /orders/{order_id}/items/{item_id} — returns the order, not 204. */
   .delete(
     '/:id/items/:itemId',
     requireRole('ADMIN', 'MANAGER', 'SERVICE'),
@@ -329,8 +320,8 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
 
     await loadOrderDetail(id)
 
-    // Scoped to the order as well as the item, so an item id from another
-    // order cannot be deleted through this one.
+    // Scoped to the order too, so an item id from another order is not
+    // deletable through this one.
     const deleted = await db
       .delete(orderItems)
       .where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, id)))

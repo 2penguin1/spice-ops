@@ -16,7 +16,7 @@ const EnvSchema = z.object({
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
-  // Optional. Each of these degrades to a working fallback — see CLAUDE.md.
+  // Optional. Each has a working fallback when it is missing.
   REDIS_URL: z.string().optional(),
   NOTIFY_DRIVER: z.enum(['console', 'webhook']).default('console'),
   NOTIFY_WEBHOOK_URL: z.string().optional(),

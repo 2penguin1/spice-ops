@@ -1,8 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
 /* ── Tokens ────────────────────────────────────────────────────────────────
-   Steel for the chrome, paper for a ticket, and status colours taken from the
-   line: waiting blue, flame orange, service green, done grey, cancelled red. */
+   Steel for the chrome, paper for a ticket, and a colour per status. */
 :root {
   --steel-900: #171b1f;
   --steel-800: #232a30;
@@ -16,10 +15,8 @@
   --confirmed: #2f6bb0;
   --preparing: #c2410c;
   --ready: #157f4b;
-  /* Not a grey: at #6b7280 this sat 13.4 ΔE from the READY green, which the
-     palette validator rejects as hard to tell apart even with full colour
-     vision, and below the chroma floor so it read as "missing" rather than
-     "done". This violet passes every check. */
+  /* Violet, not grey: grey sat too close to the READY green to separate at a
+     glance, and read as "missing" rather than "done". */
   --completed: #6a4c93;
   --cancelled: #a11742;
 
@@ -309,7 +306,7 @@ tbody tr.clickable {
   cursor: pointer;
 }
 
-/* Names and row actions read as one line, not a wrapped stack. */
+/* One line, not a wrapped stack. */
 td .actions,
 td.nowrap {
   white-space: nowrap;
@@ -318,6 +315,15 @@ td.nowrap {
 
 tbody tr.clickable:hover td {
   background: #f3efe6;
+}
+
+.row-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.row-link:hover {
+  text-decoration: underline;
 }
 
 .num {
@@ -365,9 +371,9 @@ tbody tr.clickable:hover td {
 .status-COMPLETED { color: var(--completed); }
 .status-CANCELLED { color: var(--cancelled); }
 
-/* ── Ticket — the signature ────────────────────────────────────────────────
-   A kitchen order ticket: the number set large in mono, a status stripe down
-   the spine, and a perforation under the header. */
+/* ── Ticket ────────────────────────────────────────────────────────────────
+   A kitchen order ticket: the number large in mono, a status stripe down the
+   spine, a perforation under the header. */
 
 .ticket-grid,
 .split {
@@ -377,13 +383,13 @@ tbody tr.clickable:hover td {
   align-items: start;
 }
 
-/* A table needs more room than a ticket does. */
+/* A table needs more room than a ticket. */
 .split {
   grid-template-columns: minmax(0, 2.6fr) minmax(280px, 1fr);
 }
 
-/* Grid items default to min-width: auto, so a wide table stretches its column
-   and pushes the whole page sideways. Zero lets .table-wrap scroll instead. */
+/* Grid items default to min-width: auto, so a wide table would stretch its
+   column and push the page sideways. */
 .ticket-grid > *,
 .split > * {
   min-width: 0;
@@ -667,9 +673,8 @@ tbody tr.clickable:hover td {
   color: var(--ink);
 }
 
-/* The stripe is set per status directly. Using currentColor here would make
-   every child inherit the status colour, including the button label, which
-   then needs a more specific rule to undo — a fight not worth having. */
+/* Set per status, not currentColor: every child would inherit it, including
+   the button label. */
 .ticket-card.status-CONFIRMED { border-left-color: var(--confirmed); }
 .ticket-card.status-PREPARING { border-left-color: var(--preparing); }
 .ticket-card.status-READY { border-left-color: var(--ready); }

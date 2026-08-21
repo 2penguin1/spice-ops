@@ -1,9 +1,14 @@
+import { Suspense, lazy } from 'react'
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
 import { useAuth } from './lib/auth'
 import { canEditCustomers, canSeeDashboard, canTakeOrders } from './lib/permissions'
 import { Customers } from './pages/Customers'
-import { Dashboard } from './pages/Dashboard'
+// Loaded on demand: the charting library is most of the bundle and only
+// managers and admins ever open this screen.
+const Dashboard = lazy(() =>
+  import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })),
+)
 import { Kitchen } from './pages/Kitchen'
 import { Login } from './pages/Login'
 import { NewOrder } from './pages/NewOrder'
@@ -13,7 +18,6 @@ import { Orders } from './pages/Orders'
 export default function App() {
   const { staff, signOut } = useAuth()
 
-  // Nothing renders until someone is signed in.
   if (!staff) return <Login />
 
   return (
@@ -51,6 +55,7 @@ export default function App() {
       </header>
 
       <main>
+        <Suspense fallback={<div className="page">Loading…</div>}>
         <Routes>
           <Route path="/" element={<Navigate to="/orders" replace />} />
           <Route path="/orders" element={<Orders />} />
@@ -70,6 +75,7 @@ export default function App() {
           />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
       </main>
     </>
   )

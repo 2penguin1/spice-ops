@@ -1,9 +1,6 @@
 import type { ApiError } from '../api/client'
 
-/**
- * Shows what went wrong and, where we can, what to do about it. The server's
- * message is already written for a person, so it is shown as-is.
- */
+/** The server's message is already written for a person, so show it as-is. */
 export function ErrorBanner({ error, onRetry }: { error: ApiError; onRetry?: () => void }) {
   return (
     <div className="banner" role="alert">

@@ -4,12 +4,9 @@ import { config } from '../config.ts'
 import { db } from '../db/client.ts'
 
 /**
- * Every number on the dashboard, as SQL over the tables we already have.
- *
- * There is no reporting store and no denormalised rollup: at this data size
- * (see docs/hld.md §2) aggregating live is both simpler and always correct.
- * The upgrade path, if it is ever needed, is an hourly rollup table fed by the
- * same event log — not a second copy of the truth.
+ * Every number on the dashboard, read live from the tables the app writes. At
+ * this size a separate reporting store would buy nothing; an hourly rollup off
+ * the event log is the next step if there ever is one.
  */
 
 const toNumber = (value: unknown) => Number(value ?? 0)
@@ -35,9 +32,8 @@ export async function summary(): Promise<Summary> {
       GROUP BY o.id
     ),
     prep AS (
-      -- Prep time comes from the event log, which is why those timestamps are
-      -- not duplicated onto orders. Orders still cooking have no READY event
-      -- and are excluded rather than counted as zero.
+      -- Orders still cooking have no READY event, so they are left out rather
+      -- than counted as zero.
       SELECT ready.created_at - started.created_at AS took
       FROM order_status_events started
       JOIN order_status_events ready
@@ -80,10 +76,8 @@ export async function summary(): Promise<Summary> {
 export type DailyPoint = { day: string; orders: number; revenue: number }
 
 /**
- * Orders and revenue per day.
- *
- * generate_series supplies the days, so a day with no trade appears as a zero
- * rather than a gap the chart would draw straight through.
+ * Orders and revenue per day. generate_series supplies the calendar, so a
+ * closed day charts as zero instead of a gap drawn straight through.
  */
 export async function daily(days: number): Promise<DailyPoint[]> {
   const { rows } = await db.execute(sql`
@@ -126,7 +120,7 @@ export async function daily(days: number): Promise<DailyPoint[]> {
 
 export type HourPoint = { hour: number; orders: number }
 
-/** When the kitchen is busy. Every hour is present, so the shape is honest. */
+/** Orders by hour. All 24 are returned, so quiet hours show as zero. */
 export async function byHour(): Promise<HourPoint[]> {
   const { rows } = await db.execute(sql`
     WITH hours AS (SELECT generate_series(0, 23) AS hour),
@@ -157,12 +151,11 @@ export type StaffPoint = {
 }
 
 /**
- * Per-cook throughput and speed.
+ * What each person started and finished, and how long they took.
  *
- * Deliberately not a utilization percentage. That needs a scheduled-shift
- * denominator, and a metric about a person built on data nobody keeps accurate
- * is worse than no metric — see questions.md §3.7. These two numbers come
- * from what the system actually recorded.
+ * Not a utilization percentage: that needs a shift schedule this system does
+ * not keep, and a number about a person is worse than none if its denominator
+ * is stale.
  */
 export async function byStaff(): Promise<StaffPoint[]> {
   const { rows } = await db.execute(sql`

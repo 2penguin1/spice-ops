@@ -8,19 +8,15 @@ export type OrderUpdate = { orderId: string; orderNumber: string; status: OrderS
 const RECONNECT_MS = 3000
 
 /**
- * Keeps one connection to the server's event stream open and calls `onUpdate`
- * whenever an order changes anywhere in the restaurant.
+ * Calls `onUpdate` whenever an order changes anywhere in the restaurant.
  *
- * The browser's own EventSource reconnect is deliberately not relied on: it
- * replays the original URL, and the ticket in it expires after a minute. So a
- * dropped connection is closed and reopened with a fresh ticket instead.
+ * EventSource's own reconnect replays the original URL, and the ticket in it
+ * lasts a minute — so a dropped connection is reopened with a fresh one.
  */
 export function useOrderStream(onUpdate: (update: OrderUpdate) => void) {
   const handler = useRef(onUpdate)
 
-  // Assigned after render, not during it: React may render a component more
-  // than once before committing, and a ref written in that window can be
-  // thrown away.
+  // Assigned after render, for the same reason as in useApi.
   useEffect(() => {
     handler.current = onUpdate
   })
@@ -38,7 +34,11 @@ export function useOrderStream(onUpdate: (update: OrderUpdate) => void) {
         source = new EventSource(`${BASE}/events?ticket=${encodeURIComponent(ticket)}`)
 
         source.addEventListener('order:updated', (event) => {
-          handler.current(JSON.parse((event as MessageEvent).data))
+          try {
+            handler.current(JSON.parse((event as MessageEvent).data))
+          } catch {
+            // A bad frame is not worth tearing the connection down for.
+          }
         })
 
         source.onerror = () => {

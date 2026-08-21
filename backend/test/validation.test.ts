@@ -57,9 +57,7 @@ describe('postgres error mapping', () => {
   })
 
   it('finds the driver error inside a wrapper', () => {
-    // Drizzle wraps driver errors in DrizzleQueryError, which has no `code` of
-    // its own. Reading only the outermost error turned every constraint
-    // violation into a 500.
+    // Drizzle wraps driver errors, and the wrapper carries no code of its own.
     const wrapped = new Error('Failed query: insert into "customers" ...', {
       cause: { code: '23505', constraint: 'customers_phone_idx' },
     })
@@ -86,8 +84,7 @@ describe('postgres error mapping', () => {
   })
 
   it('returns null for anything it does not recognise, so it becomes a 500', () => {
-    // Silently mapping an unknown database error to a 4xx would tell the caller
-    // they made a mistake when the fault is ours.
+    // Mapping an unknown error to a 4xx would blame the caller for our fault.
     assert.equal(fromPostgresError({ code: '42P01' }), null)
     assert.equal(fromPostgresError(new Error('boom')), null)
     assert.equal(fromPostgresError(null), null)

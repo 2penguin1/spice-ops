@@ -14,23 +14,20 @@ export type OrderUpdated = {
 
 const CHANNEL = 'spice:order:updated'
 
-/** Identifies this process, so it can ignore the messages it published itself. */
+/** Identifies this process, so it can ignore its own messages coming back. */
 const INSTANCE = randomUUID()
 
 const bus = new EventEmitter()
 
-// One listener per open SSE connection. The default cap of 10 would start
-// printing leak warnings on the eleventh kitchen screen.
+// One listener per open connection; the default cap of 10 is far too low.
 bus.setMaxListeners(0)
 
 // ─── Redis fan-out (optional) ────────────────────────────────────────────────
 
 /**
- * With one API process the in-memory bus is enough. With several behind a load
- * balancer, a client connected to instance A must still see a change made on
- * instance B — that is the only thing Redis is doing here.
- *
- * Absent, the bus still serves every client connected to this process.
+ * With one API process the in-memory bus is enough. With several, a client
+ * connected to one must still see a change made on another — that is all Redis
+ * does here.
  */
 let publisher: Redis | null = null
 
@@ -50,8 +47,7 @@ if (config.REDIS_URL) {
     try {
       const { from, ...payload } = JSON.parse(raw) as OrderUpdated & { from: string }
 
-      // Redis delivers our own publish back to us; emitting it again would
-      // send every client two copies of every change.
+      // Redis echoes our own publish back; re-emitting would double every change.
       if (from === INSTANCE) return
 
       bus.emit(CHANNEL, payload)
@@ -63,13 +59,7 @@ if (config.REDIS_URL) {
 
 // ─── Publish and subscribe ───────────────────────────────────────────────────
 
-/**
- * Announces that an order changed.
- *
- * Called from lib/orders.tx.ts *after* the transaction commits — never inside
- * it. Announcing a change that later rolls back would tell every screen
- * something untrue.
- */
+/** Announces that an order changed. Only ever called after a commit. */
 export function emitOrderUpdated(payload: OrderUpdated) {
   bus.emit(CHANNEL, payload)
   void publisher?.publish(CHANNEL, JSON.stringify({ ...payload, from: INSTANCE }))
@@ -84,7 +74,7 @@ export function trackStream(close: () => void) {
   return () => openStreams.delete(close)
 }
 
-/** Long-lived streams keep the server open, so shutdown has to end them. */
+/** Streams stay open by design, so shutdown has to end them explicitly. */
 export function closeAllStreams() {
   for (const close of openStreams) close()
   openStreams.clear()

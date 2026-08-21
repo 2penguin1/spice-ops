@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { api } from '../api/client'
 import { ORDER_STATUSES, type OrderStatus } from '../api/types'
@@ -7,6 +7,7 @@ import { Pagination } from '../components/Pagination'
 import { SkeletonRows } from '../components/Skeleton'
 import { StatusBadge } from '../components/StatusBadge'
 import { useApi, useDebounced } from '../hooks/useApi'
+import { useFilterParams } from '../hooks/useFilterParams'
 import { useOrderStream } from '../hooks/useOrderStream'
 import { useAuth } from '../lib/auth'
 import { canTakeOrders } from '../lib/permissions'
@@ -16,14 +17,11 @@ const SIZE = 20
 
 export function Orders() {
   const { staff } = useAuth()
-  // Filters live in the URL, so a filtered view can be shared and the back
-  // button behaves the way people expect.
-  const [params, setParams] = useSearchParams()
+  const { params, update, clear, page } = useFilterParams()
   const navigate = useNavigate()
 
   const search = params.get('search') ?? ''
   const status = (params.get('status') as OrderStatus | null) ?? undefined
-  const page = Number(params.get('page') ?? 1)
 
   const debouncedSearch = useDebounced(search)
 
@@ -34,17 +32,6 @@ export function Orders() {
 
   // Someone else advancing an order updates this list without a refresh.
   useOrderStream(() => reload())
-
-  function update(changes: Record<string, string | undefined>) {
-    const next = new URLSearchParams(params)
-    for (const [key, value] of Object.entries(changes)) {
-      if (value) next.set(key, value)
-      else next.delete(key)
-    }
-    // Any change to a filter invalidates the current page number.
-    if (!('page' in changes)) next.delete('page')
-    setParams(next)
-  }
 
   const orders = data?.data ?? []
 
@@ -113,7 +100,13 @@ export function Orders() {
                   className="clickable"
                   onClick={() => navigate(`/orders/${order.id}`)}
                 >
-                  <td className="num">{order.orderNumber}</td>
+                  <td className="num">
+                    {/* A link, not only a row click: this is how keyboard and
+                        screen-reader users open an order. */}
+                    <Link className="row-link" to={`/orders/${order.id}`}>
+                      {order.orderNumber}
+                    </Link>
+                  </td>
                   <td>
                     {order.customer.name}
                     <div className="muted small num">{order.customer.phone}</div>
@@ -138,7 +131,7 @@ export function Orders() {
                 : 'No orders yet. The first one starts here.'}
             </p>
             {search || status ? (
-              <button className="btn ghost" onClick={() => setParams(new URLSearchParams())}>
+              <button className="btn ghost" onClick={clear}>
                 Clear filters
               </button>
             ) : (

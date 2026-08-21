@@ -5,9 +5,8 @@ type CustomerRow = typeof customers.$inferSelect
 type OrderRow = typeof orders.$inferSelect
 type OrderItemRow = typeof orderItems.$inferSelect
 
-// ─── Contract response shapes ────────────────────────────────────────────────
-// These mirror docs/api-contract.md exactly. Adding a field here changes the
-// contract, so do not add one without changing that document first.
+// ─── Response shapes ─────────────────────────────────────────────────────────
+// What the API returns. Adding a field here changes the public API.
 
 export type Customer = {
   id: string
@@ -41,10 +40,7 @@ export type OrderDetail = {
 
 // ─── Mappers ─────────────────────────────────────────────────────────────────
 
-/**
- * node-postgres returns `numeric` as a string to avoid the precision loss of
- * a float. This is the one place it becomes a number.
- */
+/** node-postgres hands back `numeric` as a string. This is where it becomes a number. */
 const toMoney = (value: string | null) => Number(value ?? 0)
 
 export function toCustomer(row: CustomerRow): Customer {
@@ -75,8 +71,8 @@ export function toOrderDetail(
 ): OrderDetail {
   const items = itemRows.map(toOrderItem)
 
-  // Summed in whole paise, then divided once. Adding 0.1 + 0.2 in floating
-  // point gives 0.30000000000000004; adding 10 + 20 does not.
+  // Whole paise, divided once at the end: 0.1 + 0.2 is 0.30000000000000004 in
+  // floating point, 10 + 20 is not.
   const totalPaise = items.reduce((sum, item) => sum + Math.round(item.totalPrice * 100), 0)
 
   return {
@@ -85,7 +81,7 @@ export function toOrderDetail(
     customerId: order.customerId,
     status: order.status,
     totalAmount: totalPaise / 100,
-    // itemCount is the total quantity, not the number of lines — questions.md §1.3.
+    // Total quantity, not the number of lines.
     itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),

@@ -24,7 +24,7 @@ const orderRow = {
   updatedAt: UPDATED,
 }
 
-// node-postgres hands back `numeric` as a string. These rows mimic that.
+// node-postgres hands back `numeric` as a string; these rows mimic that.
 const item = (id: string, quantity: number, unitPrice: string, totalPrice: string) => ({
   id,
   orderId: 'o1',
@@ -54,8 +54,7 @@ describe('serialize', () => {
   })
 
   it('sums money without floating point drift', () => {
-    // 0.1 + 0.2 === 0.30000000000000004 in floating point. Summing in whole
-    // paise and dividing once avoids it.
+    // The case that breaks naive float addition.
     const result = toOrderDetail(orderRow, customerRow, [
       item('i1', 1, '0.10', '0.10'),
       item('i2', 1, '0.20', '0.20'),
@@ -75,7 +74,7 @@ describe('serialize', () => {
   })
 
   it('counts itemCount as total quantity, not number of lines', () => {
-    // questions.md §1.3 — an order of 2 naan and 1 biryani is 3 items.
+    // 2 naan and 1 biryani is 3 items, not 2 lines.
     const result = toOrderDetail(orderRow, customerRow, [
       item('i1', 2, '70.00', '140.00'),
       item('i2', 1, '380.00', '380.00'),
@@ -94,8 +93,7 @@ describe('serialize', () => {
   })
 
   it('emits exactly the contract fields and no others', () => {
-    // A platform-layer column leaking into an order response would break the
-    // contract silently. This test fails if that ever happens.
+    // Fails if an internal column ever leaks into a response.
     const result = toOrderDetail(orderRow, customerRow, [item('i1', 1, '10.00', '10.00')])
 
     assert.deepEqual(Object.keys(result).sort(), [

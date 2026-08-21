@@ -1,7 +1,4 @@
-/**
- * Mirrors docs/api-contract.md. These are the shapes the API returns; changing
- * one here without changing the contract is a bug on one side or the other.
- */
+// What the API returns. Changing a shape here means changing the server too.
 export type OrderStatus = 'CONFIRMED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED'
 
 export const ORDER_STATUSES: OrderStatus[] = [
@@ -42,7 +39,7 @@ export type OrderDetail = {
   items: OrderItem[]
 }
 
-/** One entry in an order's status history. `fromStatus` is null for its creation. */
+/** One step in an order's history. `fromStatus` is null when it was placed. */
 export type OrderEvent = {
   id: string
   fromStatus: OrderStatus | null

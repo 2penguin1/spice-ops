@@ -3,9 +3,8 @@ import type { OrderStatus } from '../api/types'
 export type Role = 'ADMIN' | 'MANAGER' | 'SERVICE' | 'KITCHEN'
 
 /**
- * Mirrors the server's rules so the UI does not offer a control that would be
- * refused. The server re-checks every one of these; this is a hint, not the
- * enforcement.
+ * A copy of the server's rules, used only to avoid offering a control that
+ * would be refused. The server re-checks all of it.
  */
 const STATUS_ROLES: Record<OrderStatus, Role[]> = {
   CONFIRMED: ['ADMIN', 'MANAGER'],

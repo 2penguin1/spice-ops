@@ -26,7 +26,7 @@ app.use(requestId())
 app.use(logger())
 app.use(cors({ origin: config.CORS_ORIGIN }))
 
-// Nothing this API accepts is large. Reject the rest before parsing it.
+// Nothing here is large. Reject the rest before parsing it.
 app.use(bodyLimit({ maxSize: 256 * 1024 }))
 
 app.get('/health', async (c) => {
@@ -38,11 +38,10 @@ app.get('/health', async (c) => {
   return c.json({ data: { status: db === 'up' ? 'ok' : 'degraded', db } }, db === 'up' ? 200 : 503)
 })
 
-// /health and /auth/login are the only routes reachable without a token.
+// /health, /auth/login and the event stream are the routes reachable without
+// a session token; the stream carries its own short-lived ticket instead.
 app.route('/auth', authRoutes)
 
-// The stream authenticates with a short-lived ticket in the query string,
-// because EventSource cannot send an Authorization header.
 app.route('/events', eventRoutes)
 
 app.use('/customers/*', requireAuth)
@@ -67,11 +66,8 @@ const server = serve({ fetch: app.fetch, port: config.PORT }, ({ port }) => {
 })
 
 /**
- * Every hosting platform stops a container by sending SIGTERM and killing it
- * shortly after. Without this, a deploy cuts requests that were mid-flight and
- * leaves database connections for the server to time out.
- *
- * Stop accepting new connections, let the open ones finish, close the pool.
+ * Stop taking new connections, let the open ones finish, close the pool.
+ * Without this a deploy cuts requests that were mid-flight.
  */
 let shuttingDown = false
 
@@ -82,15 +78,14 @@ function shutdown(signal: string) {
   console.log(`${signal} received — draining connections`)
   stopNotificationWorker()
 
-  // Event streams stay open by design, so server.close() would wait for ever.
+  // Streams stay open by design, so server.close() would wait for ever.
   closeAllStreams()
 
   server.close(() => {
     void Promise.all([pool.end(), closeEventBus(), closeCache()]).then(() => process.exit(0))
   })
 
-  // If a request hangs, do not block the deploy for ever. unref() so this
-  // timer alone never keeps the process alive.
+  // A hung request must not block the deploy for ever.
   setTimeout(() => {
     console.error('Shutdown timed out after 10s — exiting anyway')
     process.exit(1)

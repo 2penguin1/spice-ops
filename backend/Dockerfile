@@ -1,23 +1,21 @@
-# Single stage: the app runs TypeScript directly through tsx, so there is no
-# build output to copy between stages.
+# Single stage: tsx runs the TypeScript directly, so there is nothing to copy
+# between stages.
 FROM node:24-alpine
 
 WORKDIR /app
 
-# Copy manifests first so `npm ci` is only re-run when dependencies change.
+# Manifests first, so npm ci only re-runs when dependencies change.
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY . .
 
-# node:24-alpine ships an unprivileged `node` user. Running as root in a
-# container is a needless escalation if the process is ever compromised.
+# Unprivileged user; nothing here needs root.
 USER node
 
 ENV NODE_ENV=production
 EXPOSE 3000
 
-# node is PID 1 and receives SIGTERM directly. Going through `npm start` would
-# put npm at PID 1, which does not reliably forward signals to its child, so
-# the graceful shutdown in src/index.ts would never run.
+# node as PID 1, so it receives SIGTERM directly. npm does not reliably forward
+# signals, which would leave the shutdown handler unreachable.
 CMD ["node", "--import", "tsx", "src/index.ts"]

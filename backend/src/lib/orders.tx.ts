@@ -10,15 +10,10 @@ import { loadOrderDetail } from './orders.query.ts'
 import type { OrderDetail } from './serialize.ts'
 import { assertTransition, isNoop, type OrderStatus } from './status.ts'
 
-/** A transaction handle, as Drizzle hands it to a `db.transaction` callback. */
+/** A transaction handle, as Drizzle passes it to a `db.transaction` callback. */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
-/**
- * Records a status change in the log.
- *
- * Always called with the transaction that made the change, never on its own —
- * that is what makes it impossible for the log and the order to disagree.
- */
+/** Records a status change. Always called with the transaction that made it. */
 export function recordEvent(
   tx: Tx,
   event: { orderId: string; from: OrderStatus | null; to: OrderStatus; staffId?: string | null },
@@ -32,10 +27,8 @@ export function recordEvent(
 }
 
 /**
- * The only way an order's status changes.
- *
- * Routes call this rather than issuing their own UPDATE, so every transition
- * is checked, logged, and — from phase 13 — announced from one place.
+ * The only way an order's status changes. Every transition is checked, logged,
+ * queued for notification and announced from here.
  */
 export async function transitionOrder(
   orderId: string,
@@ -45,15 +38,14 @@ export async function transitionOrder(
   const [current] = await db.select({ status: orders.status }).from(orders).where(eq(orders.id, orderId))
   if (!current) throw ApiError.notFound('Order')
 
-  // Setting the status it already has changes nothing and is not an error.
+  // A double-tap in a busy kitchen should not be an error.
   if (isNoop(current.status, to)) return loadOrderDetail(orderId)
 
   assertTransition(current.status, to)
 
   await db.transaction(async (tx) => {
-    // The expected status sits in the WHERE clause, so this is atomic without
-    // a lock: if another request moved the order first, zero rows match and we
-    // report the conflict rather than overwriting their change.
+    // The expected status is in the WHERE clause, so no lock is needed: if
+    // someone moved it first, no rows match and we report the conflict.
     const moved = await tx
       .update(orders)
       .set({ status: to })
@@ -69,8 +61,7 @@ export async function transitionOrder(
 
     await recordEvent(tx, { orderId, from: current.status, to, staffId })
 
-    // Written with the change it describes, so a crash between committing and
-    // dispatching cannot lose the message.
+    // Queued in this transaction, so a crash cannot lose the message.
     const detail = await loadOrderDetail(orderId, tx)
     await queueNotification(tx, {
       orderId,
@@ -82,8 +73,8 @@ export async function transitionOrder(
 
   const order = await loadOrderDetail(orderId)
 
-  // After the commit, never inside it: announcing a change that then rolled
-  // back would tell every screen something untrue.
+  // After the commit. Announcing a change that then rolled back would tell
+  // every screen something untrue.
   emitOrderUpdated({ orderId, orderNumber: order.orderNumber, status: order.status })
   void invalidateAnalytics()
 

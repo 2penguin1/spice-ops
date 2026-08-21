@@ -7,9 +7,8 @@ import { assertTransition, canTransition, type OrderStatus } from '../src/lib/st
 const STATUSES = ['CONFIRMED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'] as const
 
 /**
- * The transition table from docs/lld.md §5, written out by hand rather than
- * derived from the implementation — otherwise the test would agree with a bug.
- * Rows are `from`, columns are `to`.
+ * Written out by hand rather than derived from the implementation, so the test
+ * cannot agree with a bug. Rows are `from`, columns are `to`.
  */
 const EXPECTED: Record<OrderStatus, Record<OrderStatus, boolean>> = {
   //            CONFIRMED PREPARING READY  COMPLETED CANCELLED
@@ -34,7 +33,6 @@ describe('order status machine', () => {
   })
 
   it('treats setting the same status as a no-op, not an error', () => {
-    // A double-tap in a busy kitchen must not raise an error.
     for (const status of STATUSES) {
       assert.doesNotThrow(() => assertTransition(status, status))
     }

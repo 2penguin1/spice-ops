@@ -15,17 +15,14 @@ import type {
 
 export const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
-/**
- * Held in a module variable rather than read from storage on every call, so
- * there is one place that decides what is sent.
- */
+/** One place decides what Authorization header goes out. */
 let token: string | null = null
 
 export function setAuthToken(next: string | null) {
   token = next
 }
 
-/** The server's error envelope, rethrown so components can show `message` directly. */
+/** The server's error, rethrown so a component can show `message` as-is. */
 export class ApiError extends Error {
   readonly code: string
   readonly status: number
@@ -48,7 +45,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
     response = await fetch(`${BASE}${path}`, { ...init, headers })
   } catch {
-    // fetch only rejects when the request never reached the server.
+    // fetch only rejects when the request never reached the server at all.
     throw new ApiError('NETWORK_ERROR', `Cannot reach the API at ${BASE}. Is the server running?`, 0)
   }
 
@@ -57,8 +54,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body = await response.json().catch(() => null)
 
   if (response.status === 401 && !path.startsWith('/auth/login')) {
-    // The token expired or was revoked. Tell the app once, rather than letting
-    // every screen fail on its own.
+    // Say it once, rather than letting every screen discover it separately.
     window.dispatchEvent(new Event('spice:unauthorized'))
   }
 
@@ -73,7 +69,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 
-/** Unwraps the `{ data }` envelope for endpoints that return a single object. */
+/** Unwraps `{ data }` for endpoints returning a single object. */
 const data = async <T>(path: string, init?: RequestInit): Promise<T> =>
   (await request<{ data: T }>(path, init)).data
 
@@ -121,8 +117,8 @@ export const api = {
   },
 
   events: {
-    // A ticket lasts 60 seconds and works on no other route, because
-    // EventSource cannot send an Authorization header.
+    // EventSource cannot send headers, so the stream uses a short-lived
+    // ticket in the URL instead.
     ticket: () => data<{ ticket: string }>('/events/ticket', { method: 'POST' }),
   },
 

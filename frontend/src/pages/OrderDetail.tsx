@@ -27,27 +27,24 @@ export function OrderDetail() {
   const { id = '' } = useParams()
   const { data, error, loading, reload } = useApi(() => api.orders.get(id), [id])
 
-  // Held separately from the load error: a failed action must not blank the
-  // order that is already on screen.
+  // Kept apart from the load error so a failed action does not blank the order
+  // already on screen.
   const [actionError, setActionError] = useState<ApiError | null>(null)
-  const [order, setOrder] = useState<Order | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const current = order ?? data
+  const current = data
 
-  // If another member of staff moves this order, show it here immediately.
+  // Another member of staff moving this order updates the page.
   useOrderStream((update) => {
-    if (update.orderId === id) {
-      setOrder(null)
-      reload()
-    }
+    if (update.orderId === id) reload()
   })
 
   async function run(action: () => Promise<Order>) {
     setBusy(true)
     setActionError(null)
     try {
-      setOrder(await action())
+      await action()
+      reload()
     } catch (caught) {
       setActionError(caught as ApiError)
     } finally {
@@ -236,7 +233,7 @@ function AddItem({
             type="number"
             min={1}
             value={quantity}
-            onChange={(event) => setQuantity(Math.max(1, Number(event.target.value)))}
+            onChange={(event) => setQuantity(Number(event.target.value) || 1)}
           />
         </label>
 

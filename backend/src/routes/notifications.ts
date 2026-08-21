@@ -7,12 +7,7 @@ import { notifications } from '../db/schema.ts'
 import { requireRole, type AuthVariables } from '../lib/auth.ts'
 import { validate } from '../lib/validation.ts'
 
-/**
- * What the system tried to tell customers, and whether it worked.
- *
- * An outbox nobody can inspect is an outbox nobody trusts: when a customer says
- * they were never told their food was ready, this is the answer.
- */
+/** What was sent to customers, and whether it worked. */
 const listQuery = z.object({ orderId: z.uuid().optional() })
 
 export const notificationRoutes = new Hono<{ Variables: AuthVariables }>()

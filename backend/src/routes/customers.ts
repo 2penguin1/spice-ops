@@ -30,13 +30,9 @@ const customerBody = z.object({
 
 const patchBody = customerBody.partial()
 
-/**
- * Escapes the LIKE wildcards so a customer searching for "50%" gets what they
- * asked for. Backslash is Postgres's default LIKE escape character.
- */
+/** Escapes LIKE wildcards, so searching for "50%" finds "50%". */
 const contains = (term: string) => `%${term.replace(/[\\%_]/g, '\\$&')}%`
 
-/** Drops keys the caller omitted, so PATCH updates only what was sent. */
 const omitUndefined = <T extends object>(value: T) =>
   Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined))
 
@@ -58,7 +54,6 @@ export const customerRoutes = new Hono<{ Variables: AuthVariables }>()
 
     const { limit, offset } = toLimitOffset(pagination)
 
-    // Two queries, both filtered the same way: the page, and how many there are.
     const [rows, [totals]] = await Promise.all([
       db
         .select()
@@ -76,7 +71,7 @@ export const customerRoutes = new Hono<{ Variables: AuthVariables }>()
     })
   })
 
-  /** POST /customers — create. A duplicate phone surfaces as 23505 from the unique index. */
+  /** POST /customers — a duplicate phone surfaces as 23505 from the unique index. */
   .post('/', requireRole('ADMIN', 'MANAGER', 'SERVICE'), validate('json', customerBody), async (c) => {
     const body = c.req.valid('json')
 
@@ -118,9 +113,8 @@ export const customerRoutes = new Hono<{ Variables: AuthVariables }>()
   /**
    * DELETE /customers/{id} — 204, no body.
    *
-   * The foreign key cascades, so this also removes the customer's orders. The
-   * contract lists no conflict error for a customer who still has orders, which
-   * forces that behaviour — it is the top open question in questions.md §1.1.
+   * Cascades to their orders. There is no error code for "still has orders", so
+   * deleting a customer necessarily deletes their history.
    */
   .delete(
     '/:id',

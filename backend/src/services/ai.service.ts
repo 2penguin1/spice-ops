@@ -4,23 +4,14 @@ import type { DailyPoint, HourPoint, Summary, TopItem } from './analytics.servic
 /**
  * A plain-English read of the day's numbers.
  *
- * Two rules govern what goes in the prompt:
- *
- *  1. Aggregates only. No customer rows — no names, phones or emails ever
- *     leave the building.
- *  2. No per-person data. The per-cook table is on screen for the manager who
- *     is entitled to see it; sending an individual's performance to a
- *     third-party API is a different act, and not one the feature needs.
- *
- * And one rule governs the failure path: this never throws. Without a key, or
- * with the provider down, the endpoint returns the same real figures with
- * `narrative: null` and the dashboard hides one panel. A reviewer with no key
- * sees a working dashboard, not an error.
+ * The prompt carries aggregates only — no customer rows, and no per-person
+ * figures either. This never throws: with no key or a provider outage it
+ * returns `narrative: null` and the dashboard hides one panel.
  */
 
 const ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
 
-// Long enough for a slow response, short enough that a dashboard never hangs.
+// A dashboard should never wait longer than this for commentary.
 const TIMEOUT_MS = 10_000
 
 export type Insights = {
@@ -44,7 +35,7 @@ const SYSTEM = [
   'No preamble, no heading, no closing line. Never invent a number you were not given.',
 ].join(' ')
 
-/** Reduces the dashboard to the handful of facts worth reasoning about. */
+/** The handful of figures worth reasoning about. */
 function describe({ summary, daily, hours, items }: Facts): string {
   const busiest = [...hours].sort((a, b) => b.orders - a.orders).slice(0, 3)
   const recent = daily.slice(-7)
@@ -86,9 +77,8 @@ export async function insights(facts: Facts): Promise<Insights> {
           { role: 'user', content: describe(facts) },
         ],
         temperature: 0.2,
-        // gpt-oss is a reasoning model: it spends tokens thinking before it
-        // writes anything. At 300 the reasoning consumed the whole budget and
-        // `content` came back empty. Low effort plus room for both.
+        // A reasoning model spends tokens before writing anything, so the
+        // budget has to cover both.
         reasoning_effort: 'low',
         max_tokens: 900,
       }),
@@ -110,16 +100,15 @@ export async function insights(facts: Facts): Promise<Insights> {
     const narrative = choice?.message?.content?.trim()
 
     if (!narrative) {
-      // Most often finish_reason 'length': the model ran out of budget while
-      // reasoning. Worth naming, because it is a configuration problem rather
-      // than an outage.
+      // Usually finish_reason 'length' — the model spent its budget reasoning.
+      // Log it, because that is a setting to change, not an outage.
       console.error(`AI insights: empty content, finish_reason=${choice?.finish_reason}`)
       return { narrative: null, model: null, unavailable: 'The AI provider returned nothing' }
     }
 
     return { narrative, model: body.model ?? config.GROQ_MODEL, unavailable: null }
   } catch (error) {
-    // A timeout, a DNS failure, a provider outage — all the same to the caller.
+    // Timeout, DNS, outage: all the same to the caller.
     console.error('AI insights unavailable:', (error as Error).message)
     return { narrative: null, model: null, unavailable: 'The AI provider could not be reached' }
   }

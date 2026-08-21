@@ -1,13 +1,6 @@
 import type { Context } from 'hono'
 
-/**
- * Every error code the API can return, and the HTTP status it maps to.
- * The brief names the codes but not the statuses — see questions.md §3.
- *
- * The first five are the contract's. UNAUTHORIZED and FORBIDDEN belong to the
- * platform layer and never appear on a contract route for an authenticated
- * caller. INTERNAL_ERROR is the catch-all.
- */
+/** Every error code the API returns, and the HTTP status each one maps to. */
 export const ERROR_STATUS = {
   VALIDATION_FAILED: 400,
   INVALID_FILTER: 400,
@@ -22,9 +15,8 @@ export const ERROR_STATUS = {
 export type ErrorCode = keyof typeof ERROR_STATUS
 
 export class ApiError extends Error {
-  // Declared and assigned explicitly rather than as a constructor parameter
-  // property: Node's built-in TypeScript stripping rejects those, and keeping
-  // this file runnable by plain `node` is what lets the tests need no compiler.
+  // Not a constructor parameter property: Node's type stripping rejects those,
+  // and the tests run these files without a compiler.
   readonly code: ErrorCode
 
   constructor(code: ErrorCode, message: string) {
@@ -47,9 +39,8 @@ export class ApiError extends Error {
 }
 
 /**
- * Messages for the database constraints we expect callers to hit. Letting
- * Postgres be the guard and mapping its error is the only race-free way to
- * check uniqueness — a SELECT before an INSERT lets two requests both pass.
+ * Messages for the constraints callers actually hit. Catching the violation is
+ * race-free; a SELECT before the INSERT lets two requests both pass.
  */
 const CONSTRAINT_MESSAGES: Record<string, string> = {
   customers_phone_idx: 'A customer with this phone number already exists',
@@ -77,17 +68,15 @@ function mapConstraintViolation(error: unknown): ApiError | null {
 }
 
 /**
- * Translates a Postgres error into a contract error, or null if we do not
- * recognise it.
+ * Turns a Postgres error into an API error, or null if it is not one we know.
  *
- * Walks the `cause` chain because Drizzle wraps driver errors in its own
- * DrizzleQueryError, which carries no `code` of its own. Reading only the
- * outermost error turns every constraint violation into a 500.
+ * Walks the cause chain: Drizzle wraps driver errors, and the wrapper carries
+ * no error code, so reading only the outer error turns every constraint
+ * violation into a 500.
  */
 export function fromPostgresError(error: unknown): ApiError | null {
   let current = error
 
-  // Bounded, so a self-referencing cause cannot spin forever.
   for (let depth = 0; current != null && depth < 5; depth++) {
     const mapped = mapConstraintViolation(current)
     if (mapped) return mapped

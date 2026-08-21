@@ -1,4 +1,4 @@
-/** Placeholder rows while a table loads, so the layout does not jump. */
+/** Placeholder rows, so the layout does not jump when data arrives. */
 export function SkeletonRows({ rows = 6, columns = 6 }: { rows?: number; columns?: number }) {
   return (
     <tbody>

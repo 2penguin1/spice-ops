@@ -1,19 +1,14 @@
 /**
- * Builds `database/schema.sql` — the consolidated DDL deliverable — by
- * concatenating the drizzle-kit migrations in order.
+ * Builds database/schema.sql by joining the migrations in order.
  *
- * Why not `pg_dump`: it needs a running database, emits psql-only directives,
- * and its output changes with the client version. The migrations are already
- * the exact statements we ship, so joining them has no dependencies at all.
- *
- * Generated file. Never edit it by hand — change `src/db/schema.ts` and run
- * `npm run db:generate && npm run db:schema`.
+ * Not pg_dump: that needs a live database and emits psql-only directives.
+ * The output is generated — change src/db/schema.ts and regenerate.
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-// fileURLToPath, not .pathname: on Windows .pathname yields '/D:/Phase%20...'
+// fileURLToPath, not .pathname: on Windows that yields '/D:/Phase%20...'
 const migrationsDir = fileURLToPath(new URL('../../database/migrations/', import.meta.url))
 const outFile = fileURLToPath(new URL('../../database/schema.sql', import.meta.url))
 

@@ -36,14 +36,7 @@ const TOKEN_LIFETIME = '12h'
 
 // ─── Passwords ───────────────────────────────────────────────────────────────
 
-/**
- * scrypt from node:crypto — memory-hard, salted per user, and part of the
- * standard library. argon2id is marginally stronger but needs a compiled
- * native module, which is a poor trade for a project that must install
- * cleanly on any machine.
- *
- * Stored as `scrypt$<salt>$<hash>` so the parameters travel with the hash.
- */
+/** Stored as `scrypt$<salt>$<hash>`, so the parameters travel with the hash. */
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString('hex')
   return `scrypt$${salt}$${(await derive(password, salt, 64)).toString('hex')}`
@@ -74,10 +67,9 @@ export function signToken(member: Staff): Promise<string> {
 }
 
 /**
- * No revocation list. A token is valid for 12 hours, so deactivating someone
- * stops them logging in again but does not end a session already in progress.
- * Acceptable for an internal tool where staff sign in per shift; the upgrade
- * path is a Redis set of revoked ids checked here — see docs/hld.md §9.
+ * There is no revocation list. Deactivating someone stops the next sign-in but
+ * does not end a session already running, so a token is live for up to 12 hours
+ * after that.
  */
 async function staffFromToken(token: string): Promise<Staff> {
   try {
@@ -97,12 +89,10 @@ async function staffFromToken(token: string): Promise<Staff> {
 }
 
 /**
- * A 60 second token scoped to the event stream only.
+ * A 60 second token that works on the event stream and nowhere else.
  *
- * EventSource cannot set headers, so the token has to travel in the URL, where
- * it lands in access logs. Scoping and expiry make that acceptable: this
- * ticket opens a stream that carries only order ids, and it is worthless a
- * minute later.
+ * EventSource cannot set headers, so this has to travel in the URL where access
+ * logs will keep it. Scoping and a short life are what make that survivable.
  */
 export function issueStreamTicket(member: Staff): Promise<string> {
   return new SignJWT({ role: member.role, name: member.name, scope: 'events' })
@@ -176,12 +166,8 @@ export const requireRole = (...allowed: Role[]) =>
   })
 
 /**
- * Who may move an order to a given status.
- *
- * A plain requireRole cannot express this, because the answer depends on the
- * status being requested: the kitchen cooks, the floor delivers, and only a
- * manager cancels. Kept here with the other authorization rules rather than
- * as an `if` inside the route handler.
+ * Who may move an order to a given status. requireRole cannot express this on
+ * its own, because the answer depends on which status is being asked for.
  */
 const STATUS_ROLES: Record<OrderStatus, Role[]> = {
   CONFIRMED: ['ADMIN', 'MANAGER'],
@@ -210,8 +196,8 @@ const DUMMY_HASH = `scrypt$${'0'.repeat(32)}$${'0'.repeat(128)}`
 export async function authenticate(email: string, password: string): Promise<Staff> {
   const [found] = await db.select().from(staff).where(eq(staff.email, email.toLowerCase()))
 
-  // One message for both cases, so the response cannot be used to discover
-  // which email addresses exist.
+  // Same message either way, so a caller cannot use it to find out which
+  // addresses have accounts.
   const rejected = new ApiError('UNAUTHORIZED', 'Those details do not match an account')
 
   // Hash even when there is no account, so an unknown email takes as long as a

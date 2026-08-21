@@ -9,45 +9,38 @@ import { useOrderStream } from '../hooks/useOrderStream'
 import { useAuth } from '../lib/auth'
 import { formatAge } from '../lib/format'
 import { canSetStatus } from '../lib/permissions'
+import { ACTION_LABEL } from '../lib/status'
 
-/**
- * The three columns a kitchen cares about. Completed and cancelled orders
- * leave the board — a screen above the pass should show only work outstanding.
- */
+/** Completed and cancelled orders leave the board: it shows work outstanding. */
 const COLUMNS: { status: OrderStatus; title: string; hint: string; action?: OrderStatus }[] = [
   { status: 'CONFIRMED', title: 'Waiting', hint: 'Ordered, not started', action: 'PREPARING' },
   { status: 'PREPARING', title: 'Cooking', hint: 'On the pass', action: 'READY' },
   { status: 'READY', title: 'Ready', hint: 'Waiting to be taken out', action: 'COMPLETED' },
 ]
 
-const ACTION_TEXT: Partial<Record<OrderStatus, string>> = {
-  PREPARING: 'Start prep',
-  READY: 'Mark ready',
-  COMPLETED: 'Picked up',
-}
-
 export function Kitchen() {
   const { staff } = useAuth()
   const [error, setError] = useState<ApiError | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
-  // Everything still in play. 100 is comfortably above a real service; the
-  // board is not a place for pagination.
+  // One request per column, filtered server-side. Fetching the newest hundred
+  // of any status and filtering here would drop an order that had been waiting
+  // a while, which is the one the kitchen most needs to see.
   const { data, error: loadError, loading, reload } = useApi(
-    () => api.orders.list({ size: 100 }),
+    () =>
+      Promise.all(COLUMNS.map((column) => api.orders.list({ status: column.status, size: 100 }))),
     [],
   )
 
-  // Any change anywhere refreshes the board, including one made by another
-  // member of staff on another screen.
   useOrderStream(() => reload())
 
   async function advance(order: OrderDetail, to: OrderStatus) {
     setBusyId(order.id)
     setError(null)
     try {
+      // No reload here: the change announces itself on the stream, which is
+      // already wired to reload. Calling both fetches the board twice.
       await api.orders.setStatus(order.id, to)
-      reload()
     } catch (caught) {
       setError(caught as ApiError)
     } finally {
@@ -55,9 +48,12 @@ export function Kitchen() {
     }
   }
 
-  const open = (data?.data ?? []).filter((order) =>
-    COLUMNS.some((column) => column.status === order.status),
-  )
+  const byColumn = COLUMNS.map((column, index) => ({
+    column,
+    orders: data?.[index]?.data ?? [],
+  }))
+
+  const openCount = byColumn.reduce((total, entry) => total + entry.orders.length, 0)
 
   return (
     <div className="page">
@@ -66,8 +62,8 @@ export function Kitchen() {
           <p className="eyebrow">Live · updates as orders change</p>
           <h1>Kitchen</h1>
         </div>
-        <span className="muted small">
-          {open.length} order{open.length === 1 ? '' : 's'} on the board
+        <span className="muted small" aria-live="polite">
+          {openCount} order{openCount === 1 ? '' : 's'} on the board
         </span>
       </div>
 
@@ -75,8 +71,7 @@ export function Kitchen() {
       {loadError && <ErrorBanner error={loadError} onRetry={reload} />}
 
       <div className="board">
-        {COLUMNS.map((column) => {
-          const orders = open.filter((order) => order.status === column.status)
+        {byColumn.map(({ column, orders }) => {
           const mayAct = column.action ? canSetStatus(staff!.role, column.action) : false
 
           return (
@@ -117,7 +112,7 @@ export function Kitchen() {
                       disabled={busyId === order.id}
                       onClick={() => advance(order, column.action!)}
                     >
-                      {ACTION_TEXT[column.action]}
+                      {ACTION_LABEL[column.action]}
                     </button>
                   )}
                 </article>

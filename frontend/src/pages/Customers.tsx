@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 import { ApiError, api } from '../api/client'
 import type { Customer } from '../api/types'
@@ -7,14 +7,17 @@ import { ErrorBanner } from '../components/ErrorBanner'
 import { Pagination } from '../components/Pagination'
 import { SkeletonRows } from '../components/Skeleton'
 import { useApi, useDebounced } from '../hooks/useApi'
+import { useFilterParams } from '../hooks/useFilterParams'
+import { useAuth } from '../lib/auth'
+import { canDeleteCustomers } from '../lib/permissions'
 import { formatWhen } from '../lib/format'
 
 const BLANK = { name: '', phone: '', email: '' }
 
 export function Customers() {
-  const [params, setParams] = useSearchParams()
+  const { staff } = useAuth()
+  const { params, update, page } = useFilterParams()
   const search = params.get('search') ?? ''
-  const page = Number(params.get('page') ?? 1)
   const debounced = useDebounced(search)
 
   const { data, error, loading, reload } = useApi(
@@ -26,16 +29,6 @@ export function Customers() {
   const [editing, setEditing] = useState<Customer | null>(null)
   const [actionError, setActionError] = useState<ApiError | null>(null)
   const [busy, setBusy] = useState(false)
-
-  function update(changes: Record<string, string | undefined>) {
-    const next = new URLSearchParams(params)
-    for (const [key, value] of Object.entries(changes)) {
-      if (value) next.set(key, value)
-      else next.delete(key)
-    }
-    if (!('page' in changes)) next.delete('page')
-    setParams(next)
-  }
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true)
@@ -141,20 +134,22 @@ export function Customers() {
                           >
                             Edit
                           </button>
-                          <button
-                            className="btn danger small"
-                            disabled={busy}
-                            onClick={() => {
-                              // Deleting a customer removes their orders too —
-                              // say so plainly before it happens.
-                              const sure = window.confirm(
-                                `Delete ${customer.name}? Their past orders are deleted with them, and this cannot be undone.`,
-                              )
-                              if (sure) void run(() => api.customers.remove(customer.id))
-                            }}
-                          >
-                            Delete
-                          </button>
+                          {canDeleteCustomers(staff!.role) && (
+                            <button
+                              className="btn danger small"
+                              disabled={busy}
+                              onClick={() => {
+                                // Their orders go with them, so say that before
+                                // it happens rather than after.
+                                const sure = window.confirm(
+                                  `Delete ${customer.name}? Their past orders are deleted with them, and this cannot be undone.`,
+                                )
+                                if (sure) void run(() => api.customers.remove(customer.id))
+                              }}
+                            >
+                              Delete
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
