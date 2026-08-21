@@ -82,18 +82,16 @@ export function Dashboard() {
           <h2>
             What the numbers say <span className="chip">AI</span>
           </h2>
-          <div className="insight-body">
+          {/* The model returns one observation per line, already bulleted. */}
+          <ul className="insight-body">
             {insights.data.narrative
               .split(/\r?\n/)
-              .map((line) => line.replace(/^[-•]\s*/, '').trim())
+              .map((line) => line.replace(/^[-•*]\s*/, '').trim())
               .filter(Boolean)
               .map((line) => (
-                <p key={line}>{line}</p>
+                <li key={line}>{line}</li>
               ))}
-          </div>
-          <p className="insight-note">
-            Read from the totals above. No customer or staff records leave the building.
-          </p>
+          </ul>
         </section>
       )}
 

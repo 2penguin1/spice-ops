@@ -986,15 +986,33 @@ td .actions {
 
 .insight-body {
   max-width: 92ch;
-  margin: 6px 0 0;
+  margin: 10px 0 0;
+  padding: 0;
   font-size: 14px;
-  white-space: pre-wrap;
+  list-style: none;
 }
 
-.insight-note {
-  margin: 12px 0 0;
-  color: var(--ink-soft);
-  font-size: 12px;
+.insight-body li {
+  position: relative;
+  padding-left: 17px;
+  line-height: 1.55;
+}
+
+.insight-body li + li {
+  margin-top: 9px;
+}
+
+/* A turmeric marker rather than a disc, to match the rule down the panel's
+   left edge and keep the list from looking like body copy. */
+.insight-body li::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--turmeric);
 }
 
 /* ── Kitchen board ─────────────────────────────────────────────────────── */
