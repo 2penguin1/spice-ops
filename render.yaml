@@ -25,7 +25,10 @@ services:
     # Migrating and seeding here rather than at startup keeps schema changes a
     # release step, so two instances booting together cannot race each other.
     # The seed truncates: every deploy resets the demo to the same known data.
-    buildCommand: npm ci && npm run db:migrate && npm run db:seed
+    # --include=dev because NODE_ENV=production below makes npm skip
+    # devDependencies, and drizzle-kit is one. It is a build tool, not
+    # something the running API needs, so it stays out of dependencies.
+    buildCommand: npm ci --include=dev && npm run db:migrate && npm run db:seed
     startCommand: npm start
     healthCheckPath: /health
     envVars:
@@ -52,7 +55,9 @@ services:
     name: spice-web
     runtime: static
     rootDir: frontend
-    buildCommand: npm ci && npm run build
+    # vite and typescript are devDependencies; being explicit here means a
+    # platform default for NODE_ENV can never strip them out.
+    buildCommand: npm ci --include=dev && npm run build
     staticPublishPath: dist
     envVars:
       - key: NODE_VERSION
