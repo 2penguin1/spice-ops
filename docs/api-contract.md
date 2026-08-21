@@ -1,98 +1,118 @@
-# API Contract
+# API reference
 
-Transcribed from the assignment brief. **This file is the implementation target.**
-Where the brief was silent, the gap is marked `[assumed]` and repeated in
-`questions.md`. Base URL: `http://localhost:3000` — routes are mounted at the
-root, no `/api/v1` prefix (the brief specifies `/customers`, `/orders`).
+Every endpoint, its inputs and its failures. A summary table is in the
+[readme](../readme.md#api); this is the detail.
 
-> **Layer 1.** Everything up to the appendix is the graded contract and is
-> implemented exactly as written. The platform features described in
-> `docs/plan.md` add the routes listed in the [appendix](#appendix-extension-routes)
-> and change **nothing** below this line — no extra fields, no extra error
-> codes, no altered status codes.
->
-> **Auth.** Contract routes require an `Authorization: Bearer <token>` header
-> (see the appendix). This adds `401`/`403` as transport-level failures but
-> alters no success shape. To exercise the contract without tokens, set
-> `AUTH_DISABLED=true` in `backend/.env` — `readme.md` documents both paths.
+**Contents**
 
-## Envelopes
+- [Conventions](#conventions)
+- [Objects](#objects)
+- [Auth](#auth)
+- [Customers](#customers)
+- [Orders](#orders)
+- [Order items](#order-items)
+- [Staff](#staff)
+- [Analytics](#analytics)
+- [Live updates](#live-updates)
+- [Notifications](#notifications)
+- [Health](#health)
 
-Success:
+---
 
-```jsonc
-{
-  "data": T,
-  "meta": {                 // list endpoints only
-    "pagination": { "page": 1, "size": 20, "total": 137, "totalPages": 7 }
-  }
-}
-```
+## Conventions
 
-Error:
+- Base URL `http://localhost:3000`. No version prefix.
+- Every request except `POST /auth/login` and `GET /health` needs
+  `Authorization: Bearer <token>`. The event stream uses a ticket instead.
+- Every success is `{ "data": … }`. List endpoints add
+  `"meta": { "pagination": … }`.
+- Every failure is `{ "error": { "code": …, "message": … } }`.
+- `204` responses have no body at all.
 
-```jsonc
-{ "error": { "code": "VALIDATION_FAILED", "message": "human readable" } }
-```
+### Pagination
 
-`204 No Content` responses have no body at all.
+| Parameter | Default | Rules |
+|---|---|---|
+| `page` | `1` | Whole number, 1 or more |
+| `size` | `20` | Whole number, 1 to 100 |
 
-## Shared objects
+- Anything else returns `INVALID_FILTER`.
+- `totalPages` is `ceil(total / size)`.
+- A page past the end returns an empty array with correct totals, not a 404.
+
+### Error codes
+
+| Code | HTTP | Means |
+|---|---|---|
+| `VALIDATION_FAILED` | 400 | The body is wrong |
+| `INVALID_FILTER` | 400 | A query parameter is wrong |
+| `UNAUTHORIZED` | 401 | No token, or an expired one |
+| `FORBIDDEN` | 403 | Signed in, but not allowed to do this |
+| `RESOURCE_NOT_FOUND` | 404 | No such thing |
+| `RESOURCE_ALREADY_EXISTS` | 409 | Something unique already has that value |
+| `INVALID_STATUS_TRANSITION` | 409 | That status move is not allowed |
+| `INTERNAL_ERROR` | 500 | Our fault |
+
+---
+
+## Objects
 
 ### Customer
 
-| Field       | Type              | Notes                          |
-|-------------|-------------------|--------------------------------|
-| `id`        | string (uuid)     |                                |
-| `name`      | string            |                                |
-| `email`     | string \| null    | nullable, not optional         |
-| `phone`     | string            | unique across customers        |
-| `createdAt` | string (ISO-8601) | timestamptz                    |
-| `updatedAt` | string (ISO-8601) | timestamptz                    |
-
-### OrderDetail
-
-| Field         | Type                                                        | Notes                        |
-|---------------|-------------------------------------------------------------|------------------------------|
-| `id`          | string (uuid)                                               |                              |
-| `orderNumber` | string                                                      | e.g. `ORD-000042`            |
-| `customerId`  | string (uuid)                                               |                              |
-| `status`      | `CONFIRMED\|PREPARING\|READY\|COMPLETED\|CANCELLED`         |                              |
-| `totalAmount` | number                                                      | derived: Σ item totalPrice   |
-| `itemCount`   | number                                                      | derived: Σ item quantity `[assumed]` |
-| `createdAt`   | string (ISO-8601)                                           |                              |
-| `updatedAt`   | string (ISO-8601)                                           |                              |
-| `customer`    | Customer                                                    | always embedded              |
-| `items`       | OrderItem[]                                                 | always embedded              |
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | UUID |
+| `name` | string | |
+| `email` | string \| null | Nullable, not optional — the key is always present |
+| `phone` | string | Unique across customers |
+| `createdAt` `updatedAt` | string | ISO-8601 |
 
 ### OrderItem
 
-| Field        | Type    | Notes                                    |
-|--------------|---------|------------------------------------------|
-| `id`         | string  | `[assumed]` — not in the brief's shape, but `DELETE /orders/{id}/items/{item_id}` needs it |
-| `itemName`   | string  |                                          |
-| `quantity`   | integer | `> 0`                                    |
-| `unitPrice`  | number  | `>= 0`, 2 dp                             |
-| `totalPrice` | number  | generated column: `quantity * unitPrice` |
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | Needed to delete the item |
+| `itemName` | string | |
+| `quantity` | number | Whole number above zero |
+| `unitPrice` | number | Zero or more, at most two decimals |
+| `totalPrice` | number | `quantity × unitPrice`, computed by the database |
 
-## Error code → HTTP status `[assumed]`
+### OrderDetail
 
-The brief names codes but not statuses.
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | |
+| `orderNumber` | string | `ORD-000042` |
+| `customerId` | string | |
+| `status` | string | One of the five statuses |
+| `totalAmount` | number | Summed from the items |
+| `itemCount` | number | Total quantity, not the number of lines |
+| `createdAt` `updatedAt` | string | ISO-8601 |
+| `customer` | Customer | Always included |
+| `items` | OrderItem[] | Always included |
 
-| Code                       | HTTP |
-|----------------------------|------|
-| `VALIDATION_FAILED`        | 400  |
-| `INVALID_FILTER`           | 400  |
-| `RESOURCE_NOT_FOUND`       | 404  |
-| `RESOURCE_ALREADY_EXISTS`  | 409  |
-| `INVALID_STATUS_TRANSITION`| 409  |
-| (unhandled)                | 500 `{"code":"INTERNAL_ERROR"}` |
+---
 
-## Pagination `[assumed]`
+## Auth
 
-`page` defaults to `1`, `size` to `20`, `size` capped at `100`. Both must be
-positive integers; anything else → `INVALID_FILTER`. `totalPages = ceil(total/size)`.
-A `page` beyond the end returns `data: []` with correct `meta`, not a 404.
+### `POST /auth/login`
+
+No token needed.
+
+```json
+{ "email": "manager@spice.test", "password": "spice123" }
+```
+
+→ `200` `{ "data": { "token": "…", "staff": { "id", "name", "role" } } }`
+
+- The token lasts 12 hours.
+- **Errors:** `VALIDATION_FAILED`, `UNAUTHORIZED`.
+- A wrong password and an unknown email return the same message, and take the
+  same time, so responses cannot be used to find out which accounts exist.
+
+### `GET /auth/me`
+
+→ `200` with the current token's owner.
 
 ---
 
@@ -100,36 +120,39 @@ A `page` beyond the end returns `data: []` with correct `meta`, not a 404.
 
 ### `GET /customers`
 
-Query: `search?` (string), `page?`, `size?`
-→ `200` `ApiResponse<Customer[]>` with pagination meta.
+| Query | Type | Notes |
+|---|---|---|
+| `search` | string | Matches name, email or phone, anywhere, ignoring case |
+| `page` `size` | number | See [pagination](#pagination) |
 
-`search` matches `name`, `email` or `phone`, case-insensitive substring `[assumed]`.
+→ `200` `{ data: Customer[], meta }`, newest first.
 
-Errors: `INVALID_FILTER` (bad `page`/`size`).
+**Errors:** `INVALID_FILTER`.
 
 ### `POST /customers`
 
-Body: `{ name, email: string|null, phone }` — `name`, `phone` required.
-→ `201` `ApiResponse<Customer>`
+```json
+{ "name": "Aarav Sharma", "email": "aarav@example.com", "phone": "+91 98200 11223" }
+```
 
-Errors: `VALIDATION_FAILED`, `RESOURCE_ALREADY_EXISTS` (phone taken).
+- `name` and `phone` are required. `email` may be `null`.
+- → `201` `{ data: Customer }`
+- **Errors:** `VALIDATION_FAILED`, `RESOURCE_ALREADY_EXISTS` (phone taken),
+  `FORBIDDEN` (kitchen).
 
 ### `PATCH /customers/{id}`
 
-Body: `{ name?, email?, phone? }`, all optional. Empty body is a no-op `[assumed]`.
-→ `200` `ApiResponse<Customer>`
-
-Errors: `VALIDATION_FAILED`, `RESOURCE_ALREADY_EXISTS`, `RESOURCE_NOT_FOUND`.
+- Same fields, all optional. An empty body returns the record unchanged.
+- → `200` `{ data: Customer }`
+- **Errors:** `VALIDATION_FAILED`, `RESOURCE_ALREADY_EXISTS`,
+  `RESOURCE_NOT_FOUND`, `FORBIDDEN`.
 
 ### `DELETE /customers/{id}`
 
-→ `204` no body.
-
-Errors: `RESOURCE_NOT_FOUND`.
-
-Deleting a customer cascades to their orders and order items `[assumed]` — the
-brief lists no conflict error for a customer who still has orders. **This is the
-top clarifying question in `questions.md`.**
+- → `204`, no body.
+- **Deletes their orders too.** There is no error for "still has orders", so
+  this is what deleting a customer means. See [questions.md §1.1](../questions.md).
+- **Errors:** `RESOURCE_NOT_FOUND`, `FORBIDDEN` (service and kitchen).
 
 ---
 
@@ -137,176 +160,230 @@ top clarifying question in `questions.md`.**
 
 ### `GET /orders`
 
-Query: `search?`, `status?`, `customerId?`, `page?`, `size?`
-→ `200` `ApiResponse<OrderDetail[]>` with pagination meta.
+| Query | Type | Notes |
+|---|---|---|
+| `search` | string | Matches order number, customer name or phone |
+| `status` | string | One of the five statuses |
+| `customerId` | string | |
+| `page` `size` | number | See [pagination](#pagination) |
 
-`search` matches `orderNumber`, customer `name` or customer `phone`,
-case-insensitive substring `[assumed]`. Default sort: `createdAt DESC` `[assumed]`.
+→ `200` `{ data: OrderDetail[], meta }`, newest first.
 
-Errors:
-- `INVALID_FILTER` — bad `page`, `size`, or a `status` outside the enum.
-- `RESOURCE_NOT_FOUND` — `customerId` does not exist.
+**Errors:**
 
-### `GET /orders/{order_id}`
+- `INVALID_FILTER` — bad `page`, `size` or `status`.
+- `RESOURCE_NOT_FOUND` — no such customer. A malformed id gives the same
+  answer: an id that cannot name a customer is a customer that does not exist.
 
-→ `200` `ApiResponse<OrderDetail>`. Errors: `RESOURCE_NOT_FOUND`.
+### `GET /orders/{id}`
+
+→ `200` `{ data: OrderDetail }`. **Errors:** `RESOURCE_NOT_FOUND`.
 
 ### `POST /orders`
 
-```jsonc
+```json
 {
-  "customer": { "id": "uuid | null", "name": "...", "email": "... | null", "phone": "..." },
-  "items": [ { "itemName": "...", "quantity": 2, "unitPrice": 12.5 } ]
+  "customer": { "id": null, "name": "Walk In", "email": null, "phone": "+91 98200 11223" },
+  "items": [{ "itemName": "Chicken Biryani", "quantity": 1, "unitPrice": 380 }]
 }
 ```
 
-- `customer.id` present → attach to that customer; `404 RESOURCE_NOT_FOUND` if absent.
-  The other customer fields are then ignored, not applied as an update `[assumed]`.
-- `customer.id` null/omitted → create the customer from the given details. If the
-  `phone` already belongs to a customer, reuse that customer rather than failing
-  `[assumed]` — creating an order should not 409 on a returning caller.
-- `items` must contain ≥ 1 entry → else `VALIDATION_FAILED`.
-- New orders start at `CONFIRMED` `[assumed]`.
+**How the customer is resolved:**
+
+| Input | What happens |
+|---|---|
+| `customer.id` given | Attach to them. The other fields are ignored, not applied as an update |
+| No id, phone already on file | Attach to that customer. Their details are not overwritten |
+| No id, phone is new | Create the customer |
+
+**Rules:**
+
+- At least one item, at most 60.
+- New orders start `CONFIRMED`.
 - The whole thing is one transaction.
 
-→ `201` `ApiResponse<OrderDetail>`. Errors: `VALIDATION_FAILED`, `RESOURCE_NOT_FOUND`.
+**Optional header:** `Idempotency-Key: <string>`
 
-### `PATCH /orders/{order_id}/status`
+- Send the same key twice and the same order comes back, not a second one.
+- The same key with a different body returns `VALIDATION_FAILED` — that is a
+  caller bug and replaying would hide it.
+- Without the header, nothing about this endpoint changes.
 
-Body: `{ "status": "PREPARING" }`
-→ `200` `ApiResponse<OrderDetail>`
+→ `201` `{ data: OrderDetail }`
 
-Allowed transitions `[assumed]` — the brief names the error, not the machine:
+**Errors:** `VALIDATION_FAILED`, `RESOURCE_NOT_FOUND` (unknown `customer.id`),
+`FORBIDDEN` (kitchen).
+
+### `PATCH /orders/{id}/status`
+
+```json
+{ "status": "PREPARING" }
+```
+
+Allowed moves:
 
 ```
 CONFIRMED ──▶ PREPARING ──▶ READY ──▶ COMPLETED
     │             │           │
     └─────────────┴───────────┴──▶ CANCELLED
-
-COMPLETED and CANCELLED are terminal. Same-status is a no-op 200, not an error.
 ```
 
-Errors: `RESOURCE_NOT_FOUND`, `VALIDATION_FAILED` (unknown status value),
-`INVALID_STATUS_TRANSITION` (valid status, illegal move).
+- `COMPLETED` and `CANCELLED` are final.
+- Setting the status it already has returns `200` and changes nothing.
 
-### `POST /orders/{order_id}/items`
+→ `200` `{ data: OrderDetail }`
 
-Body: `{ itemName, quantity, unitPrice }`
-→ `201` `ApiResponse<OrderDetail>` (the **whole** order, not the item).
+**Errors:**
 
-Errors: `RESOURCE_NOT_FOUND`, `VALIDATION_FAILED`.
+- `VALIDATION_FAILED` — not one of the five statuses.
+- `RESOURCE_NOT_FOUND` — no such order.
+- `INVALID_STATUS_TRANSITION` — a real status, an illegal move, **or** someone
+  else moved the order first.
+- `FORBIDDEN` — the role may not make this particular move. See the
+  [role table](../readme.md#who-can-do-what).
 
-The brief lists no transition error here, so items may be added to an order in
-any status, including `COMPLETED` `[assumed]` — flagged in `questions.md`.
+### `GET /orders/{id}/timeline`
 
-### `DELETE /orders/{order_id}/items/{item_id}`
+→ `200` with every status the order has been through:
 
-→ `200` `ApiResponse<OrderDetail>` (note: 200 with the order, not 204).
+```json
+{ "data": [{ "id": "…", "fromStatus": null, "toStatus": "CONFIRMED", "createdAt": "…" }] }
+```
 
-Errors: `RESOURCE_NOT_FOUND` (order or item; item must belong to that order),
-`VALIDATION_FAILED`.
-
-Removing the last item leaves an order with zero items, `totalAmount: 0` `[assumed]` —
-the ≥1-item rule is stated only for creation.
+- `fromStatus` is `null` for the event that created the order.
+- Ordered oldest first.
+- **Errors:** `RESOURCE_NOT_FOUND`.
 
 ---
 
-# Appendix: extension routes
+## Order items
 
-Not part of the assignment brief. A grader checking contract adherence can stop
-reading at the line above. These use the same envelopes so the API stays
-internally consistent, and they add two codes — `UNAUTHORIZED` (401) and
-`FORBIDDEN` (403) — that **never** appear on a contract route for a caller with
-a valid token.
+### `POST /orders/{id}/items`
 
-## Auth
+```json
+{ "itemName": "Garlic Naan", "quantity": 2, "unitPrice": 70 }
+```
 
-| Route | Purpose |
-|---|---|
-| `POST /auth/login` | `{ email, password }` → `{ data: { token, staff } }`. 12h HS256 JWT carrying `{ sub, role, name }`. |
-| `GET /auth/me` | current staff record from the token |
+→ `201` `{ data: OrderDetail }` — the **whole order**, not the item.
 
-Seeded accounts (documented in `readme.md`, password `spice123` for all):
-`admin@spice.test`, `manager@spice.test`, `cook@spice.test`, `server@spice.test`.
+**Errors:** `VALIDATION_FAILED`, `RESOURCE_NOT_FOUND`, `FORBIDDEN`.
 
-## Role matrix over contract routes
+### `DELETE /orders/{id}/items/{itemId}`
 
-Enforced by `requireRole` middleware. Any authenticated role may read.
+→ `200` `{ data: OrderDetail }` — the whole order. Note `200`, not `204`.
 
-| Action | ADMIN | MANAGER | SERVICE | KITCHEN |
-|---|:--:|:--:|:--:|:--:|
-| Create order, add/remove items | ✓ | ✓ | ✓ | — |
-| `CONFIRMED → PREPARING`, `→ READY` | ✓ | ✓ | — | ✓ |
-| `READY → COMPLETED` | ✓ | ✓ | ✓ | — |
-| `→ CANCELLED` | ✓ | ✓ | — | — |
-| Customer create / update | ✓ | ✓ | ✓ | — |
-| Customer delete | ✓ | ✓ | — | — |
-| Staff management, analytics | ✓ | ✓ (no staff delete) | — | — |
+- The item must belong to that order, so an item id from another order cannot
+  be deleted through this one.
+- Removing the last item is allowed; the order sits at zero.
+- **Errors:** `RESOURCE_NOT_FOUND` (order or item), `FORBIDDEN`.
+
+---
 
 ## Staff
 
-`GET /staff`, `POST /staff`, `PATCH /staff/{id}`, `DELETE /staff/{id}`,
-`POST /staff/{id}/shifts`, `GET /staff/{id}/shifts` — same envelopes, same
-pagination rules, same error codes plus `UNAUTHORIZED`/`FORBIDDEN`.
+Admins and managers only. Managers cannot delete anyone, set a role, or change
+another person's password.
 
-## Orders — claiming
-
-`POST /orders/{order_id}/claim` — a cook claims an unassigned `CONFIRMED` order
-and moves it to `PREPARING` in one atomic statement:
-
-```sql
-UPDATE orders SET status='PREPARING', assigned_staff_id=$staff
-WHERE id=$1 AND status='CONFIRMED' AND assigned_staff_id IS NULL
-```
-
-Returns `OrderDetail` (without `assignedStaffId` — the assignment is visible via
-`GET /orders/{id}/timeline`).
-
-0 rows changed means one of two things, and they are different errors, so the
-handler re-reads the row to tell them apart:
-
-| Row state | Response |
-|---|---|
-| already has an `assigned_staff_id` | `409 RESOURCE_ALREADY_EXISTS` |
-| unassigned but not `CONFIRMED` | `409 INVALID_STATUS_TRANSITION` |
-| gone | `404 RESOURCE_NOT_FOUND` |
-
-`GET /orders/{order_id}/timeline` — the `order_status_events` rows for an order:
-`{ fromStatus, toStatus, staff: { id, name } | null, createdAt }[]`.
-
-## Analytics (ADMIN, MANAGER)
-
-| Route | Returns |
-|---|---|
-| `GET /analytics/summary` | revenue (net / incoming), status funnel, cancellation rate, avg prep time |
-| `GET /analytics/timeseries?days=14` | orders and revenue per day, peak hours |
-| `GET /analytics/staff` | per-cook throughput, avg prep time, utilization |
-| `GET /analytics/menu` | top items, co-occurrence pairs |
-| `GET /analytics/ai-insights` | the above aggregates plus `narrative: string \| null` — **null, not an error, when no API key is configured** |
-
-`utilization` is the union of a cook's prep intervals over their scheduled
-shift, capped at 1.0 by construction. It is labelled in the UI as *"share of
-shift with at least one order in preparation"* — see `docs/plan.md` §8.
-
-## Real-time
-
-`GET /events` — `text/event-stream`. Frames carry ids, not bodies:
-
-```
-event: order:updated
-data: {"orderId":"…","status":"PREPARING"}
-```
-
-Clients refetch the affected order, which keeps authorization on the fetch path.
-
-## Ops
-
-`GET /health` → `{ status, db, redis }`. `GET /metrics` (ADMIN) → request counts,
-p50/p95 latency by route, queue depth.
-
-## Request headers
-
-| Header | Where | Effect |
+| Method | Path | Notes |
 |---|---|---|
-| `Authorization: Bearer <jwt>` | all routes unless `AUTH_DISABLED=true` | identity + role |
-| `Idempotency-Key: <string>` | `POST /orders`, optional | replays the stored response instead of creating a second order. Same key + different body → `VALIDATION_FAILED`. Absent → no behaviour change. |
+| `GET` | `/staff` | Paginated. Never returns a password hash |
+| `POST` | `/staff` | `name`, `email`, `password` (8+), `role` |
+| `PATCH` | `/staff/{id}` | All fields optional, plus `isActive` |
+| `DELETE` | `/staff/{id}` | `204`. Admins only |
+
+**Guards:**
+
+- You cannot delete your own account.
+- The last active admin cannot be deleted, demoted or deactivated.
+
+---
+
+## Analytics
+
+Admins and managers only. Cached for 30 seconds; the written summary for 15
+minutes.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /analytics/summary` | Revenue taken and still cooking, order counts, status mix, cancellation rate, average prep time |
+| `GET /analytics/daily?days=` | Orders and revenue per day. `days` is 1–90, default 14 |
+| `GET /analytics/hours` | Orders per hour. All 24 hours, so quiet ones show as zero |
+| `GET /analytics/staff` | Orders started and finished per person, and average prep time |
+| `GET /analytics/items` | Best selling dishes by quantity |
+| `GET /analytics/insights` | `{ narrative, model, unavailable }` |
+
+**Notes:**
+
+- Days and hours are bucketed in the restaurant's timezone, not the server's.
+- `averagePrepSeconds` is `null` when nothing has finished yet — never zero.
+- `/analytics/insights` **always returns 200**. With no AI key, a provider
+  outage or a timeout, `narrative` is `null` and `unavailable` says why.
+- **Errors:** `INVALID_FILTER` (bad `days`), `FORBIDDEN`.
+
+---
+
+## Live updates
+
+### `POST /events/ticket`
+
+→ `200` `{ "data": { "ticket": "…" } }`
+
+- Lasts 60 seconds and works on no other route.
+- Needed because a browser's `EventSource` cannot send an `Authorization`
+  header.
+
+### `GET /events?ticket=…`
+
+A `text/event-stream` connection.
+
+```
+event: ready
+data: {"ok":true}
+
+event: order:updated
+data: {"orderId":"…","orderNumber":"ORD-000042","status":"PREPARING"}
+
+event: ping
+data:
+```
+
+- Frames carry an **id, not the order** — the client refetches, which keeps
+  permission checks on the fetch path.
+- `ping` every 25 seconds, so proxies do not drop an idle connection.
+- **Errors:** `UNAUTHORIZED` — missing ticket, expired ticket, or a session
+  token used in its place.
+
+---
+
+## Notifications
+
+### `GET /notifications?orderId=`
+
+Admins and managers only. What was sent to customers and whether it worked.
+
+```json
+{
+  "data": [{
+    "id": "…", "orderId": "…", "channel": "console",
+    "recipient": "+91 98200 11223", "body": "Spice Garden: order ORD-000042 is ready.",
+    "status": "SENT", "attempts": 1, "lastError": null,
+    "createdAt": "…", "sentAt": "…"
+  }]
+}
+```
+
+`status` is `PENDING`, `SENDING`, `SENT` or `FAILED`. Three attempts, then
+`FAILED` with the reason in `lastError`.
+
+---
+
+## Health
+
+### `GET /health`
+
+No token needed.
+
+→ `200` `{ "data": { "status": "ok", "db": "up" } }`
+
+→ `503` `{ "data": { "status": "degraded", "db": "down" } }` when Postgres is
+unreachable. The API stays up and recovers by itself.
