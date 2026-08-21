@@ -5,6 +5,9 @@ them, managers watch the numbers.
 
 **TypeScript · Hono · Zod · Drizzle · PostgreSQL 18 · React 19 · Vite**
 
+**Live at [spice-ops.sujalsingh.dev](https://spice-ops.sujalsingh.dev)** — sign in
+as `manager@spice.test` with `spice123`.
+
 ---
 
 ## Contents
@@ -615,117 +618,22 @@ psql "$DATABASE_URL" -f database/seed.sql
 
 ## Deploying
 
-### Render, from the blueprint
+Running at [spice-ops.sujalsingh.dev](https://spice-ops.sujalsingh.dev) on a
+single EC2 instance: Postgres, Redis, the API and Caddy as containers on one
+machine. Caddy serves the built frontend and proxies `/api` to the API, so both
+sit on one origin — no CORS to configure, and the event stream is not a
+cross-site request. It obtains and renews the certificate itself.
 
-[`render.yaml`](render.yaml) describes the database, the API and the web app.
-Render reads it and creates all three, so nothing is typed in by hand.
+The whole thing is described in [`infra/`](infra/) as Terraform, and
+[`infra/README.md`](infra/README.md) covers running it, the trade-offs of
+putting everything on one box, and what to do when a deploy does not come up.
+[`render.yaml`](render.yaml) is a second, smaller target for the same
+application.
 
-1. Push this repository to GitHub.
-2. In Render, choose **New → Blueprint** and pick the repository.
-3. Approve the plan. Render creates `spice-db`, `spice-api` and `spice-web`.
-
-It wires up the parts that usually get pasted wrong:
-
-| Value | Where it comes from |
-|---|---|
-| `DATABASE_URL` | The database it just created |
-| `JWT_SECRET` | Generated, and never shown to anyone |
-| `CORS_ORIGIN` | The web app's own address |
-| `VITE_API_URL` | The API's own address |
-
-The build runs `db:migrate` and `db:seed` before the API starts. Migrating at
-build time rather than on boot keeps it a release step, so two instances
-starting together cannot race. **The seed truncates**, so every deploy resets
-the demo to the same data — which is what you want for a link people try, and
-not what you want if it holds anything real.
-
-**What the free plan costs you:**
-
-- The API sleeps after 15 minutes idle. The first request afterwards takes
-  around a minute, and any open event stream drops.
-- A free Postgres instance expires after 30 days.
-- No Redis, so: no cache, one instance, and an in-process event bus. That is
-  the documented fallback, and everything still works.
-
-### AWS, with Terraform
-
-[`infra/`](infra/) puts the whole system on one free-tier EC2 instance:
-Postgres, Redis, the API and nginx, as containers on a single machine. That is
-a deliberate trade — one box means one failure domain and no horizontal scale,
-and in exchange it costs nothing and there is one place to look when something
-breaks.
-
-```bash
-cd infra
-cp terraform.tfvars.example terraform.tfvars   # edit region, domain, ssh_key_name
-terraform init
-
-# The address first, so DNS can point at it before anything needs it.
-terraform apply -target=aws_eip.app
-#   → elastic_ip = "13.x.x.x"
-#   Add an A record for your domain pointing at that address, and wait for
-#   it to resolve. A certificate is issued by proving control of the name
-#   over HTTP, which cannot work until it does.
-
-terraform apply
-```
-
-First boot takes 5–10 minutes: the instance installs Docker, clones this
-repository and builds both images itself, so nothing has to be pushed to a
-registry.
-
-**What it creates:** one `t3.micro`, one security group, and a generated
-signing secret and database password that no person ever sees. Nothing else.
-
-**How the pieces fit:**
-
-- Caddy serves the built frontend and proxies `/api` to the API, so both are
-  on one origin. There is no CORS to configure, and the event stream is not a
-  cross-site request.
-- Given a domain, Caddy obtains and renews the TLS certificate itself and
-  redirects HTTP to HTTPS. Without one it serves plain HTTP on the IP.
-- Postgres initialises itself from `database/schema.sql` and `database/seed.sql`,
-  which it runs once when its data directory is empty. Production therefore
-  ships no migration tool.
-- Redis is present here, so the cache and the Redis-backed event bus are both
-  live rather than falling back.
-- A systemd unit brings the stack back after a reboot.
-
-**Two things to know:**
-
-- Without a domain it serves plain **HTTP**, because an IP address cannot hold
-  a certificate. Some domains make this decision for you: everything under
-  `.dev` is in the HSTS preload list, so browsers refuse to load it over HTTP
-  at all.
-- `terraform destroy` removes everything, including the database volume and
-  the address.
-
-To read the boot log when something does not come up:
-
-```bash
-ssh ec2-user@<ip>
-sudo tail -f /var/log/cloud-init-output.log
-cd /opt/spice && sudo docker compose -f docker-compose.prod.yml ps
-```
-
-### Anywhere else
-
-The API is a stateless container. It reads all configuration from the
+The API itself is a stateless container. It reads all configuration from the
 environment, starts without a `.env` file, drains in-flight requests on
-`SIGTERM`, and reports readiness at `/health`.
-
-```bash
-docker build -t spice-oms-backend ./backend
-docker run -p 3000:3000   -e DATABASE_URL=... -e JWT_SECRET=... -e CORS_ORIGIN=...   spice-oms-backend
-```
-
-- Managed Postgres works as-is; `?sslmode=require` in the connection string is
-  honoured.
-- Run `npm run db:migrate` as a release step, never on boot.
-- The event stream holds a connection open, so the API needs a **container, not
-  a serverless function**, and a load balancer idle timeout above 60 seconds.
-- The frontend is a static build. Serve `frontend/dist` from any host or CDN,
-  and rewrite unknown paths to `index.html` so the router can own them.
+`SIGTERM`, and reports readiness at `/health` — so it will run anywhere that
+runs containers.
 
 ---
 
@@ -760,3 +668,4 @@ need none and are listed for completeness.
 | [`questions.md`](questions.md) | Where the requirements were open to interpretation, what I chose, and the four questions I would put to the product owner |
 | [`docs/architecture.md`](docs/architecture.md) | Scale figures, transaction boundaries, concurrency, failure modes, what breaks first, and the trade-offs behind each choice |
 | [`docs/api-contract.md`](docs/api-contract.md) | Every endpoint in detail: inputs, outputs and failures |
+| [`infra/README.md`](infra/README.md) | Deploying it, updating it, and what to check when it does not come up |
