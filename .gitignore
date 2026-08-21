@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+
+# Local machine overrides (port conflicts, personal settings)
+docker-compose.override.yml
