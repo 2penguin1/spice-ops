@@ -3,10 +3,10 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 
 import { db } from '../db/client.ts'
-import { customers, orderItems, orders } from '../db/schema.ts'
+import { customers, orderItems, orders, orderStatusEvents } from '../db/schema.ts'
 import { ApiError, fromPostgresError } from '../lib/errors.ts'
 import { attachItems, loadOrderDetail } from '../lib/orders.query.ts'
-import { assertTransition, isNoop } from '../lib/status.ts'
+import { recordEvent, transitionOrder, type Tx } from '../lib/orders.tx.ts'
 import {
   orderStatusSchema,
   paginationMeta,
@@ -72,7 +72,6 @@ async function assertCustomerExists(customerId: string) {
 }
 
 type CustomerInput = z.infer<typeof createOrderBody>['customer']
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /**
  * Attaches the order to an existing customer, or creates one.
@@ -193,6 +192,9 @@ export const orderRoutes = new Hono()
         })),
       )
 
+      // The order came from nowhere, so this event has no previous status.
+      await recordEvent(tx, { orderId: order!.id, from: null, to: 'CONFIRMED' })
+
       return order!.id
     })
 
@@ -205,36 +207,32 @@ export const orderRoutes = new Hono()
     validate('param', uuidParam, 'RESOURCE_NOT_FOUND'),
     validate('json', statusBody),
     async (c) => {
-      const { id } = c.req.valid('param')
-      const { status } = c.req.valid('json')
-
-      const [current] = await db.select({ status: orders.status }).from(orders).where(eq(orders.id, id))
-      if (!current) throw ApiError.notFound('Order')
-
-      // Setting the status it already has changes nothing and is not an error.
-      if (!isNoop(current.status, status)) {
-        assertTransition(current.status, status)
-
-        // The guard is in the WHERE clause, so this is atomic without a lock:
-        // if another request moved the order first, zero rows match and we
-        // report the conflict instead of overwriting their change.
-        const moved = await db
-          .update(orders)
-          .set({ status })
-          .where(and(eq(orders.id, id), eq(orders.status, current.status)))
-          .returning({ id: orders.id })
-
-        if (moved.length === 0) {
-          throw new ApiError(
-            'INVALID_STATUS_TRANSITION',
-            'The order status changed in another request — reload and try again',
-          )
-        }
-      }
-
-      return c.json({ data: await loadOrderDetail(id) })
+      const order = await transitionOrder(c.req.valid('param').id, c.req.valid('json').status)
+      return c.json({ data: order })
     },
   )
+
+  /** GET /orders/{order_id}/timeline — every status this order has been through. */
+  .get('/:id/timeline', validate('param', uuidParam, 'RESOURCE_NOT_FOUND'), async (c) => {
+    const { id } = c.req.valid('param')
+
+    await loadOrderDetail(id)
+
+    const events = await db
+      .select()
+      .from(orderStatusEvents)
+      .where(eq(orderStatusEvents.orderId, id))
+      .orderBy(orderStatusEvents.createdAt)
+
+    return c.json({
+      data: events.map((event) => ({
+        id: event.id,
+        fromStatus: event.fromStatus,
+        toStatus: event.toStatus,
+        createdAt: event.createdAt.toISOString(),
+      })),
+    })
+  })
 
   /** POST /orders/{order_id}/items — returns the whole order, per the contract. */
   .post(

@@ -92,3 +92,29 @@ export const orderItems = pgTable(
     check('order_items_unit_price_non_negative', sql`${table.unitPrice} >= 0`),
   ],
 )
+
+/**
+ * Every status change an order has been through.
+ *
+ * Written in the SAME transaction as the change itself, so the log can never
+ * disagree with the order it describes. This is the source for every
+ * time-based metric — prep time, throughput, the funnel — which is why prep
+ * timestamps are not duplicated onto `orders`.
+ */
+export const orderStatusEvents = pgTable(
+  'order_status_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    // Null for the event that created the order: it came from nowhere.
+    fromStatus: orderStatus('from_status'),
+    toStatus: orderStatus('to_status').notNull(),
+    createdAt: timestamps.createdAt,
+  },
+  (table) => [
+    index('order_status_events_order_id_created_at_idx').on(table.orderId, table.createdAt),
+    index('order_status_events_to_status_created_at_idx').on(table.toStatus, table.createdAt),
+  ],
+)

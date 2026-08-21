@@ -6,7 +6,7 @@
 
 BEGIN;
 
-TRUNCATE order_items, orders, customers RESTART IDENTITY CASCADE;
+TRUNCATE order_status_events, order_items, orders, customers RESTART IDENTITY CASCADE;
 ALTER SEQUENCE order_number_seq RESTART WITH 1;
 
 INSERT INTO customers (name, email, phone) VALUES
@@ -73,5 +73,46 @@ INSERT INTO order_items (order_id, item_name, quantity, unit_price)
 SELECT p.order_id, m.item_name, p.quantity, m.unit_price
 FROM picks p
 JOIN menu m ON m.idx = p.idx;
+
+-- Status history, derived from each order's final status so the timeline and
+-- the prep-time metrics have something real to read. Times come from the row
+-- number, not random(), so a seeded database is identical every run.
+WITH numbered AS (
+  SELECT id, status, created_at, row_number() OVER (ORDER BY created_at) AS n
+  FROM orders
+),
+steps AS (
+  SELECT
+    id, status, created_at, n,
+    make_interval(mins => ( 2 + (n % 7))::int)  AS to_prep,   -- 2-8 min before a cook starts
+    make_interval(mins => ( 9 + (n % 17))::int) AS to_ready,  -- 9-25 min cooking
+    make_interval(mins => ( 3 + (n % 8))::int)  AS to_done,   -- 3-10 min to reach the table
+    make_interval(mins => ( 5 + (n % 11))::int) AS to_cancel
+  FROM numbered
+)
+INSERT INTO order_status_events (order_id, from_status, to_status, created_at)
+  SELECT id, NULL, 'CONFIRMED'::order_status, created_at
+  FROM steps
+UNION ALL
+  SELECT id, 'CONFIRMED'::order_status, 'PREPARING'::order_status, created_at + to_prep
+  FROM steps WHERE status IN ('PREPARING', 'READY', 'COMPLETED')
+UNION ALL
+  SELECT id, 'PREPARING'::order_status, 'READY'::order_status, created_at + to_prep + to_ready
+  FROM steps WHERE status IN ('READY', 'COMPLETED')
+UNION ALL
+  SELECT id, 'READY'::order_status, 'COMPLETED'::order_status,
+         created_at + to_prep + to_ready + to_done
+  FROM steps WHERE status = 'COMPLETED'
+UNION ALL
+  SELECT id, 'CONFIRMED'::order_status, 'CANCELLED'::order_status, created_at + to_cancel
+  FROM steps WHERE status = 'CANCELLED';
+
+-- An order was last touched when its last event happened.
+UPDATE orders o
+SET updated_at = latest.at
+FROM (
+  SELECT order_id, max(created_at) AS at FROM order_status_events GROUP BY order_id
+) latest
+WHERE latest.order_id = o.id;
 
 COMMIT;
