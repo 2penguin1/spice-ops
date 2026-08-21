@@ -63,9 +63,17 @@ resource "aws_security_group" "app" {
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description = "Web"
+    description = "HTTP. Also carries the certificate challenge, so it stays open even with TLS."
     from_port   = 80
     to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -111,6 +119,7 @@ resource "aws_instance" "app" {
     jwt_secret   = random_password.jwt_secret.result
     db_password  = random_password.db_password.result
     groq_api_key = var.groq_api_key
+    domain       = var.domain
   })
 
   # Replace the machine when the boot script changes, rather than leaving a
@@ -118,4 +127,27 @@ resource "aws_instance" "app" {
   user_data_replace_on_change = true
 
   tags = { Name = "spice-oms" }
+}
+
+# A fixed address, so the DNS record keeps pointing at the right machine when
+# the instance is replaced. Free while it is attached to a running instance.
+#
+# Allocated on its own rather than as part of the instance, so the address can
+# be created and pointed at from DNS before anything boots:
+#
+#   terraform apply -target=aws_eip.app   # prints the address
+#   ... add the A record, wait for it to resolve ...
+#   terraform apply                       # builds the rest
+#
+# That order matters with a domain: the certificate is issued by proving
+# control of the name over HTTP, which cannot succeed until DNS resolves.
+resource "aws_eip" "app" {
+  domain = "vpc"
+
+  tags = { Name = "spice-oms" }
+}
+
+resource "aws_eip_association" "app" {
+  instance_id   = aws_instance.app.id
+  allocation_id = aws_eip.app.id
 }

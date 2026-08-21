@@ -657,23 +657,33 @@ breaks.
 
 ```bash
 cd infra
-cp terraform.tfvars.example terraform.tfvars   # edit region and ssh_key_name
+cp terraform.tfvars.example terraform.tfvars   # edit region, domain, ssh_key_name
 terraform init
+
+# The address first, so DNS can point at it before anything needs it.
+terraform apply -target=aws_eip.app
+#   → elastic_ip = "13.x.x.x"
+#   Add an A record for your domain pointing at that address, and wait for
+#   it to resolve. A certificate is issued by proving control of the name
+#   over HTTP, which cannot work until it does.
+
 terraform apply
 ```
 
-`terraform apply` prints the URL. First boot takes 5–10 minutes: the instance
-installs Docker, clones this repository and builds both images itself, so
-nothing has to be pushed to a registry.
+First boot takes 5–10 minutes: the instance installs Docker, clones this
+repository and builds both images itself, so nothing has to be pushed to a
+registry.
 
 **What it creates:** one `t3.micro`, one security group, and a generated
 signing secret and database password that no person ever sees. Nothing else.
 
 **How the pieces fit:**
 
-- nginx serves the built frontend and proxies `/api` to the API, so both are
+- Caddy serves the built frontend and proxies `/api` to the API, so both are
   on one origin. There is no CORS to configure, and the event stream is not a
   cross-site request.
+- Given a domain, Caddy obtains and renews the TLS certificate itself and
+  redirects HTTP to HTTPS. Without one it serves plain HTTP on the IP.
 - Postgres initialises itself from `database/schema.sql` and `database/seed.sql`,
   which it runs once when its data directory is empty. Production therefore
   ships no migration tool.
@@ -683,10 +693,12 @@ signing secret and database password that no person ever sees. Nothing else.
 
 **Two things to know:**
 
-- It serves **HTTP, not HTTPS**, because an IP address cannot have a
-  certificate. Fine for a demo; put a domain and a certificate in front of it
-  before it holds anything real.
-- `terraform destroy` removes everything, including the database volume.
+- Without a domain it serves plain **HTTP**, because an IP address cannot hold
+  a certificate. Some domains make this decision for you: everything under
+  `.dev` is in the HSTS preload list, so browsers refuse to load it over HTTP
+  at all.
+- `terraform destroy` removes everything, including the database volume and
+  the address.
 
 To read the boot log when something does not come up:
 

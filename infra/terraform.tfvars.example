@@ -14,6 +14,10 @@ ssh_key_name = ""
 # Find it with: curl -s https://checkip.amazonaws.com
 ssh_cidr = "0.0.0.0/0"
 
+# Public hostname. Point an A record at the elastic_ip output first.
+# Leave empty to serve plain HTTP on the IP address.
+domain = ""
+
 # Optional. Without it the dashboard shows every figure and hides the
 # written summary.
 groq_api_key = ""

@@ -1,8 +1,9 @@
 # Render blueprint: database, API and web app in one deploy.
 #
 # Point Render at this repository and it creates all three, wires the
-# connection string and the two cross-service URLs, and generates a signing
-# secret. Nothing here needs a value pasted in by hand.
+# connection string and generates a signing secret. The two service URLs are
+# written out below: Render only exposes private-network hostnames to a
+# blueprint, and a browser cannot use one.
 #
 # Redis is deliberately absent. Without it the API runs on one instance with
 # no cache and an in-process event bus, which is the documented fallback and
@@ -44,11 +45,12 @@ services:
       # cannot alter what this builds against.
       - key: NODE_VERSION
         value: "24"
+      # The public origin, written out rather than linked with `fromService`.
+      # Render's only cross-service property is `host`, and that is the
+      # private-network name — a browser cannot resolve it, so a linked value
+      # here blocks every request the app makes. Update if the URL changes.
       - key: CORS_ORIGIN
-        fromService:
-          type: web
-          name: spice-web
-          property: host
+        value: https://spice-web.onrender.com
       # Declared so the dashboard value survives a blueprint sync, but left
       # unset: with no key the dashboard still renders every real figure and
       # simply hides the written summary.
@@ -67,11 +69,10 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "24"
+      # Same reason as CORS_ORIGIN above: the public URL, not the private one.
+      # Baked in at build time, so changing it needs a redeploy, not a restart.
       - key: VITE_API_URL
-        fromService:
-          type: web
-          name: spice-api
-          property: host
+        value: https://spice-api-lxvp.onrender.com
     routes:
       # The router owns every path, so anything that is not a built file has to
       # reach index.html. Without this, reloading /orders returns a 404.

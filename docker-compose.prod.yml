@@ -66,8 +66,21 @@ services:
       args:
         VITE_API_URL: /api
     restart: unless-stopped
-    ports: ['80:80']
+    environment:
+      # A domain here makes Caddy obtain a certificate and redirect HTTP to
+      # HTTPS. Unset, it serves plain HTTP on :80.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - '80:80'   # also the ACME challenge, so it stays open with a domain
+      - '443:443'
+    volumes:
+      # Certificates and the ACME account key. Losing these means asking for a
+      # new certificate on every restart, and the issuer rate-limits that.
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on: [api]
 
 volumes:
   spice_pgdata:
+  caddy_data:
+  caddy_config:

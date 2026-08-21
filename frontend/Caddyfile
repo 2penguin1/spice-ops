@@ -1,0 +1,31 @@
+# Serves the built site and proxies the API, on one origin.
+#
+# SITE_ADDRESS is the public name. Given a domain, Caddy obtains and renews a
+# certificate by itself and redirects HTTP to HTTPS. Left unset it falls back
+# to plain HTTP on :80, which is what a local run wants.
+{$SITE_ADDRESS::80} {
+	root * /srv
+	encode gzip
+
+	# Vite fingerprints these filenames, so a change produces a new name and
+	# the old one can be cached forever.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy api:3000 {
+			# The event stream is one response that never ends. Any buffering
+			# holds each frame until the buffer fills, which for a few hundred
+			# bytes a minute means the screen never updates.
+			flush_interval -1
+		}
+	}
+
+	# The router owns every path, so anything that is not a real file has to
+	# reach index.html or reloading /orders returns a 404.
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}

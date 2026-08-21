@@ -1,5 +1,10 @@
-# Build the static site, then serve it from nginx. The build tools are left
-# behind in the first stage; the image that ships is nginx and a folder of files.
+# Build the static site, then serve it from Caddy. The build tools are left
+# behind in the first stage; the image that ships is one binary and a folder
+# of files.
+#
+# Caddy rather than nginx because it obtains and renews the TLS certificate
+# itself. The alternative is nginx plus certbot plus a renewal timer, which is
+# three moving parts to do what this does with a domain name.
 
 FROM node:24-alpine AS build
 
@@ -19,9 +24,9 @@ ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM caddy:2-alpine
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/dist /srv
 
-EXPOSE 80
+EXPOSE 80 443

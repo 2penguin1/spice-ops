@@ -35,6 +35,22 @@ variable "ssh_cidr" {
   default     = "0.0.0.0/0"
 }
 
+variable "domain" {
+  description = <<-EOT
+    Public hostname, for example "spice-ops.example.dev". Given one, the
+    instance obtains a TLS certificate for it automatically.
+
+    Point an A record at the elastic_ip output BEFORE running apply, or at
+    least before the instance finishes booting: the certificate is issued by
+    proving control of the name over HTTP, which cannot work until DNS
+    resolves.
+
+    Leave empty to serve plain HTTP on the IP address.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "groq_api_key" {
   description = "Optional. Without it the dashboard shows every figure and hides the written summary."
   type        = string

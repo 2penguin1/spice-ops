@@ -39,13 +39,26 @@ TOKEN=$(curl -fsSL -X PUT "http://169.254.169.254/latest/api/token" \
 PUBLIC_IP=$(curl -fsSL -H "X-aws-ec2-metadata-token: $${TOKEN}" \
   "http://169.254.169.254/latest/meta-data/public-ipv4")
 
+DOMAIN="${domain}"
+if [ -n "$${DOMAIN}" ]; then
+  # A bare hostname tells Caddy to obtain a certificate for it and to redirect
+  # HTTP to HTTPS. It keeps retrying, so DNS that is still propagating delays
+  # the certificate rather than failing the boot.
+  SITE_ADDRESS="$${DOMAIN}"
+  PUBLIC_URL="https://$${DOMAIN}"
+else
+  SITE_ADDRESS=":80"
+  PUBLIC_URL="http://$${PUBLIC_IP}"
+fi
+
 # 0600 because it holds the signing secret and the database password.
 umask 077
 cat >/opt/spice/.env <<EOF
 POSTGRES_PASSWORD=${db_password}
 JWT_SECRET=${jwt_secret}
 GROQ_API_KEY=${groq_api_key}
-PUBLIC_URL=http://$${PUBLIC_IP}
+SITE_ADDRESS=$${SITE_ADDRESS}
+PUBLIC_URL=$${PUBLIC_URL}
 EOF
 
 docker compose -f docker-compose.prod.yml up -d --build
@@ -71,4 +84,4 @@ EOF
 systemctl daemon-reload
 systemctl enable spice.service
 
-echo "Spice Garden OMS is up on http://$${PUBLIC_IP}"
+echo "Spice Garden OMS is up on $${PUBLIC_URL}"
