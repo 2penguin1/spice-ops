@@ -2,12 +2,13 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
-import { requestId } from 'hono/request-id'
+import { requestId, type RequestIdVariables } from 'hono/request-id'
 
 import { config } from './config.ts'
 import { pool } from './db/client.ts'
+import { errorHandler, notFoundHandler } from './lib/errors.ts'
 
-const app = new Hono()
+const app = new Hono<{ Variables: RequestIdVariables }>()
 
 app.use(requestId())
 app.use(logger())
@@ -22,12 +23,8 @@ app.get('/health', async (c) => {
   return c.json({ data: { status: db === 'up' ? 'ok' : 'degraded', db } }, db === 'up' ? 200 : 503)
 })
 
-app.notFound((c) => c.json({ error: { code: 'RESOURCE_NOT_FOUND', message: 'Route not found' } }, 404))
-
-app.onError((err, c) => {
-  console.error(`[${c.get('requestId')}]`, err)
-  return c.json({ error: { code: 'INTERNAL_ERROR', message: 'Something went wrong' } }, 500)
-})
+app.notFound(notFoundHandler)
+app.onError(errorHandler)
 
 serve({ fetch: app.fetch, port: config.PORT }, ({ port }) => {
   console.log(`API listening on http://localhost:${port}`)
