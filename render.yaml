@@ -49,6 +49,11 @@ services:
           type: web
           name: spice-web
           property: host
+      # Declared so the dashboard value survives a blueprint sync, but left
+      # unset: with no key the dashboard still renders every real figure and
+      # simply hides the written summary.
+      - key: GROQ_API_KEY
+        sync: false
 
   # The web app is a static build; there is no server to run.
   - type: web
