@@ -31,8 +31,33 @@ app.route('/orders', orderRoutes)
 app.notFound(notFoundHandler)
 app.onError(errorHandler)
 
-serve({ fetch: app.fetch, port: config.PORT }, ({ port }) => {
+const server = serve({ fetch: app.fetch, port: config.PORT }, ({ port }) => {
   console.log(`API listening on http://localhost:${port}`)
 })
+
+/**
+ * Every hosting platform stops a container by sending SIGTERM and killing it
+ * shortly after. Without this, a deploy cuts requests that were mid-flight and
+ * leaves database connections for the server to time out.
+ *
+ * Stop accepting new connections, let the open ones finish, close the pool.
+ */
+function shutdown(signal: string) {
+  console.log(`${signal} received — draining connections`)
+
+  server.close(() => {
+    void pool.end().then(() => process.exit(0))
+  })
+
+  // If a request hangs, do not block the deploy for ever. unref() so this
+  // timer alone never keeps the process alive.
+  setTimeout(() => {
+    console.error('Shutdown timed out after 10s — exiting anyway')
+    process.exit(1)
+  }, 10_000).unref()
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))
 
 export default app
