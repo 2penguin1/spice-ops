@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 
+import { config } from '../config.ts'
 import { db } from '../db/client.ts'
 
 /**
@@ -12,6 +13,9 @@ import { db } from '../db/client.ts'
  */
 
 const toNumber = (value: unknown) => Number(value ?? 0)
+
+// A day ends when the restaurant closes, not at UTC midnight.
+const TZ = sql.raw(`'${config.RESTAURANT_TZ.replace(/'/g, "''")}'`)
 
 export type Summary = {
   revenue: { net: number; incoming: number }
@@ -37,14 +41,17 @@ export async function summary(): Promise<Summary> {
       SELECT ready.created_at - started.created_at AS took
       FROM order_status_events started
       JOIN order_status_events ready
-        ON ready.order_id = started.order_id AND ready.to_status = 'READY'
+        ON ready.order_id = started.order_id
+       AND ready.to_status = 'READY'
+       AND ready.created_at > started.created_at
       WHERE started.to_status = 'PREPARING'
     )
     SELECT
       (SELECT coalesce(sum(total), 0) FROM order_totals WHERE status = 'COMPLETED')            AS net,
       (SELECT coalesce(sum(total), 0) FROM order_totals WHERE status IN ('PREPARING','READY')) AS incoming,
       (SELECT count(*) FROM orders)                                                            AS total_orders,
-      (SELECT count(*) FROM orders WHERE created_at >= date_trunc('day', now()))               AS today_orders,
+      (SELECT count(*) FROM orders
+        WHERE created_at >= date_trunc('day', now() AT TIME ZONE ${TZ}) AT TIME ZONE ${TZ})    AS today_orders,
       (SELECT count(*) FROM orders WHERE status = 'CANCELLED')                                 AS cancelled,
       (SELECT extract(epoch FROM avg(took)) FROM prep)                                         AS avg_prep_seconds
   `)
@@ -82,18 +89,21 @@ export async function daily(days: number): Promise<DailyPoint[]> {
   const { rows } = await db.execute(sql`
     WITH calendar AS (
       SELECT generate_series(
-        date_trunc('day', now()) - make_interval(days => ${days - 1}),
-        date_trunc('day', now()),
+        date_trunc('day', now() AT TIME ZONE ${TZ}) - make_interval(days => ${days - 1}),
+        date_trunc('day', now() AT TIME ZONE ${TZ}),
         interval '1 day'
       ) AS day
     ),
     totals AS (
-      SELECT date_trunc('day', o.created_at) AS day,
+      SELECT date_trunc('day', o.created_at AT TIME ZONE ${TZ}) AS day,
              count(DISTINCT o.id) AS orders,
              coalesce(sum(i.total_price), 0) AS revenue
       FROM orders o
       LEFT JOIN order_items i ON i.order_id = o.id
       WHERE o.status <> 'CANCELLED'
+        -- Bounded, or this scans every order ever placed to chart two weeks.
+        AND o.created_at >= (date_trunc('day', now() AT TIME ZONE ${TZ})
+                             - make_interval(days => ${days - 1})) AT TIME ZONE ${TZ}
       GROUP BY 1
     )
     SELECT to_char(calendar.day, 'YYYY-MM-DD') AS day,
@@ -119,12 +129,15 @@ export type HourPoint = { hour: number; orders: number }
 /** When the kitchen is busy. Every hour is present, so the shape is honest. */
 export async function byHour(): Promise<HourPoint[]> {
   const { rows } = await db.execute(sql`
-    WITH hours AS (SELECT generate_series(0, 23) AS hour)
-    SELECT hours.hour,
-           count(orders.id)::int AS orders
+    WITH hours AS (SELECT generate_series(0, 23) AS hour),
+    tally AS (
+      SELECT extract(hour FROM created_at AT TIME ZONE ${TZ})::int AS hour, count(*)::int AS orders
+      FROM orders
+      GROUP BY 1
+    )
+    SELECT hours.hour, coalesce(tally.orders, 0) AS orders
     FROM hours
-    LEFT JOIN orders ON extract(hour FROM orders.created_at) = hours.hour
-    GROUP BY hours.hour
+    LEFT JOIN tally ON tally.hour = hours.hour
     ORDER BY hours.hour
   `)
 
@@ -159,7 +172,9 @@ export async function byStaff(): Promise<StaffPoint[]> {
              ready.created_at - started.created_at AS took
       FROM order_status_events started
       LEFT JOIN order_status_events ready
-        ON ready.order_id = started.order_id AND ready.to_status = 'READY'
+        ON ready.order_id = started.order_id
+       AND ready.to_status = 'READY'
+       AND ready.created_at > started.created_at
       WHERE started.to_status = 'PREPARING' AND started.staff_id IS NOT NULL
     )
     SELECT s.id, s.name, s.role::text AS role,

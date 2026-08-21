@@ -10,6 +10,9 @@ const EnvSchema = z.object({
   JWT_SECRET: z.string().min(1),
 
   PORT: z.coerce.number().int().positive().default(3000),
+  // Days and hours on the dashboard are bucketed in the restaurant's own
+  // time, not the server's.
+  RESTAURANT_TZ: z.string().default('Asia/Kolkata'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 

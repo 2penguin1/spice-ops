@@ -42,7 +42,10 @@ function asReplay(
   existing: typeof idempotencyKeys.$inferSelect,
   endpoint: string,
   body: unknown,
-): Replay {
+): Replay | null {
+  // Claimed but not yet finished: the first request is still running.
+  if (existing.statusCode === 0) return null
+
   // Same key, different request: the client has a bug, and replaying the old
   // response would hide it while quietly dropping the new order.
   if (existing.endpoint !== endpoint || existing.requestHash !== hashOf(body)) {
@@ -54,18 +57,29 @@ function asReplay(
   return { statusCode: existing.statusCode, body: existing.responseBody }
 }
 
-/** Claims the key inside the caller's transaction. Throws 23505 if it is taken. */
-export function claimKey(
-  tx: Tx,
-  entry: { key: string; endpoint: string; body: unknown; statusCode: number; response: unknown },
-) {
+/**
+ * Takes the key before any of the work happens.
+ *
+ * A concurrent request with the same key blocks here, on the primary key,
+ * rather than after inserting a duplicate order and rolling it back.
+ * statusCode 0 marks it as in progress until `recordResponse` fills it in.
+ */
+export function claimKey(tx: Tx, entry: { key: string; endpoint: string; body: unknown }) {
   return tx.insert(idempotencyKeys).values({
     key: entry.key,
     endpoint: entry.endpoint,
     requestHash: hashOf(entry.body),
-    statusCode: entry.statusCode,
-    responseBody: entry.response as object,
+    statusCode: 0,
+    responseBody: {},
   })
+}
+
+/** Stores what to replay, in the same transaction that did the work. */
+export function recordResponse(tx: Tx, key: string, statusCode: number, response: unknown) {
+  return tx
+    .update(idempotencyKeys)
+    .set({ statusCode, responseBody: response as object })
+    .where(eq(idempotencyKeys.key, key))
 }
 
 /**

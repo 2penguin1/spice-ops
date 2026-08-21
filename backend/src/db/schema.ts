@@ -166,6 +166,7 @@ export const notifications = pgTable(
     attempts: integer('attempts').notNull().default(0),
     lastError: text('last_error'),
     createdAt: timestamps.createdAt,
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
     sentAt: timestamp('sent_at', { withTimezone: true }),
   },
   (table) => [

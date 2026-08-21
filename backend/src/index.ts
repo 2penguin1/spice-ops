@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { requestId, type RequestIdVariables } from 'hono/request-id'
@@ -8,7 +9,7 @@ import { config } from './config.ts'
 import { pool } from './db/client.ts'
 import { closeCache } from './lib/cache.ts'
 import { startNotificationWorker, stopNotificationWorker } from './lib/notifications.ts'
-import { closeEventBus } from './lib/events.ts'
+import { closeAllStreams, closeEventBus } from './lib/events.ts'
 import { requireAuth, type AuthVariables } from './lib/auth.ts'
 import { errorHandler, notFoundHandler } from './lib/errors.ts'
 import { authRoutes } from './routes/auth.ts'
@@ -24,6 +25,9 @@ const app = new Hono<{ Variables: RequestIdVariables & AuthVariables }>()
 app.use(requestId())
 app.use(logger())
 app.use(cors({ origin: config.CORS_ORIGIN }))
+
+// Nothing this API accepts is large. Reject the rest before parsing it.
+app.use(bodyLimit({ maxSize: 256 * 1024 }))
 
 app.get('/health', async (c) => {
   const db = await pool
@@ -69,9 +73,17 @@ const server = serve({ fetch: app.fetch, port: config.PORT }, ({ port }) => {
  *
  * Stop accepting new connections, let the open ones finish, close the pool.
  */
+let shuttingDown = false
+
 function shutdown(signal: string) {
+  if (shuttingDown) return
+  shuttingDown = true
+
   console.log(`${signal} received — draining connections`)
   stopNotificationWorker()
+
+  // Event streams stay open by design, so server.close() would wait for ever.
+  closeAllStreams()
 
   server.close(() => {
     void Promise.all([pool.end(), closeEventBus(), closeCache()]).then(() => process.exit(0))

@@ -4,16 +4,18 @@ import { z } from 'zod'
 
 import { db } from '../db/client.ts'
 import { customers, orderItems, orders, orderStatusEvents } from '../db/schema.ts'
-import { assertCanSetStatus, requireRole, type AuthVariables } from '../lib/auth.ts'
+import { assertCanSetStatus, attributableId, requireRole, type AuthVariables } from '../lib/auth.ts'
 import { ApiError, fromPostgresError } from '../lib/errors.ts'
 import { attachItems, loadOrderDetail } from '../lib/orders.query.ts'
 import { invalidateAnalytics } from '../lib/cache.ts'
-import { claimKey, findReplay, isDuplicateKey } from '../lib/idempotency.ts'
+import { claimKey, findReplay, isDuplicateKey, recordResponse } from '../lib/idempotency.ts'
 import { queueNotification } from '../lib/notifications.ts'
 import { emitOrderUpdated } from '../lib/events.ts'
 import { recordEvent, transitionOrder, type Tx } from '../lib/orders.tx.ts'
 import {
   orderStatusSchema,
+  searchTerm,
+  shortText,
   paginationMeta,
   paginationQuery,
   toLimitOffset,
@@ -24,7 +26,7 @@ import {
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 const listQuery = paginationQuery.extend({
-  search: z.string().trim().min(1).optional(),
+  search: searchTerm,
   status: orderStatusSchema.optional(),
   // Not validated as a uuid here: the contract's only listed error for this
   // parameter is RESOURCE_NOT_FOUND, and an id that cannot name a customer is
@@ -33,8 +35,8 @@ const listQuery = paginationQuery.extend({
 })
 
 const itemBody = z.object({
-  itemName: z.string().trim().min(1),
-  quantity: z.number().int().positive(),
+  itemName: shortText(120),
+  quantity: z.number().int().positive().max(999),
   unitPrice: z
     .number()
     .nonnegative()
@@ -45,15 +47,16 @@ const createOrderBody = z.object({
   customer: z
     .object({
       id: z.uuid().nullable().optional(),
-      name: z.string().trim().min(1).optional(),
-      email: z.email().nullable().optional(),
-      phone: z.string().trim().min(1).optional(),
+      name: shortText(120).optional(),
+      email: z.email().max(160).nullable().optional(),
+      phone: shortText(30).optional(),
     })
     .refine(
       (value) => Boolean(value.id) || Boolean(value.name && value.phone),
       'customer.name and customer.phone are required when customer.id is not given',
     ),
-  items: z.array(itemBody).min(1, 'Order must contain at least one item'),
+  // Capped: one request should not be able to insert unbounded rows.
+  items: z.array(itemBody).min(1, 'Order must contain at least one item').max(60),
 })
 
 const statusBody = z.object({ status: orderStatusSchema })
@@ -104,25 +107,16 @@ async function resolveCustomer(tx: Tx, input: CustomerInput): Promise<string> {
 
   const phone = input.phone!
 
-  const [byPhone] = await tx.select({ id: customers.id }).from(customers).where(eq(customers.phone, phone))
-  if (byPhone) return byPhone.id
+  // Upsert rather than select-then-insert. Two requests with the same new
+  // phone would otherwise race, and the loser's 23505 aborts the surrounding
+  // transaction, leaving nothing to recover with.
+  const [row] = await tx
+    .insert(customers)
+    .values({ name: input.name!, email: input.email ?? null, phone })
+    .onConflictDoUpdate({ target: customers.phone, set: { phone } })
+    .returning({ id: customers.id })
 
-  try {
-    const [created] = await tx
-      .insert(customers)
-      .values({ name: input.name!, email: input.email ?? null, phone })
-      .returning({ id: customers.id })
-
-    return created!.id
-  } catch (error) {
-    // Another request inserted the same phone between our lookup and insert.
-    // The unique index is what makes that safe; re-read and use theirs.
-    if (fromPostgresError(error)?.code !== 'RESOURCE_ALREADY_EXISTS') throw error
-
-    const [raced] = await tx.select({ id: customers.id }).from(customers).where(eq(customers.phone, phone))
-    if (!raced) throw error
-    return raced.id
-  }
+  return row!.id
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -185,7 +179,7 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
     const body = c.req.valid('json')
 
     // Optional. Absent, nothing about this endpoint changes.
-    const key = c.req.header('Idempotency-Key')
+    const key = z.string().min(1).max(200).safeParse(c.req.header('Idempotency-Key')).data
 
     if (key) {
       const replay = await findReplay(key, ENDPOINT, body)
@@ -194,6 +188,10 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
 
     // One transaction: a half-written order with no items must never exist.
     const created = await db.transaction(async (tx) => {
+      // Taken before any work, so a concurrent retry waits here rather than
+      // building a duplicate order and rolling it back.
+      if (key) await claimKey(tx, { key, endpoint: ENDPOINT, body })
+
       const customerId = await resolveCustomer(tx, body.customer)
 
       const [order] = await tx.insert(orders).values({ customerId }).returning({ id: orders.id })
@@ -223,15 +221,7 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
         phone: detail.customer.phone,
       })
 
-      if (key) {
-        await claimKey(tx, {
-          key,
-          endpoint: ENDPOINT,
-          body,
-          statusCode: 201,
-          response: { data: detail },
-        })
-      }
+      if (key) await recordResponse(tx, key, 201, { data: detail })
 
       return detail
     }).catch(async (error) => {
@@ -272,7 +262,7 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
       // check lives with the other authorization rules, not in this handler.
       assertCanSetStatus(staff, status)
 
-      const order = await transitionOrder(c.req.valid('param').id, status, staff.id)
+      const order = await transitionOrder(c.req.valid('param').id, status, attributableId(staff))
       return c.json({ data: order })
     },
   )
@@ -319,7 +309,13 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
         unitPrice: item.unitPrice.toFixed(2),
       })
 
-      return c.json({ data: await loadOrderDetail(id) }, 201)
+      const updated = await loadOrderDetail(id)
+
+      // The total changed, so screens and cached figures are now stale.
+      emitOrderUpdated({ orderId: id, orderNumber: updated.orderNumber, status: updated.status })
+      void invalidateAnalytics()
+
+      return c.json({ data: updated }, 201)
     },
   )
 
@@ -342,6 +338,11 @@ export const orderRoutes = new Hono<{ Variables: AuthVariables }>()
 
       if (deleted.length === 0) throw ApiError.notFound('Order item')
 
-      return c.json({ data: await loadOrderDetail(id) })
+      const updated = await loadOrderDetail(id)
+
+      emitOrderUpdated({ orderId: id, orderNumber: updated.orderNumber, status: updated.status })
+      void invalidateAnalytics()
+
+      return c.json({ data: updated })
     },
   )

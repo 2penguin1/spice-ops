@@ -10,6 +10,12 @@ export const orderStatusSchema = z.enum(orderStatus.enumValues)
 
 export const uuidParam = z.object({ id: z.uuid() })
 
+/** Free text from a caller. Bounded so one request cannot post a novel. */
+export const shortText = (max = 120) => z.string().trim().min(1).max(max)
+
+/** Search terms are bounded too: a huge term becomes a huge ILIKE scan. */
+export const searchTerm = z.string().trim().min(1).max(80).optional()
+
 export const PAGE_SIZE_DEFAULT = 20
 export const PAGE_SIZE_MAX = 100
 

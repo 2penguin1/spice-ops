@@ -76,6 +76,20 @@ export function emitOrderUpdated(payload: OrderUpdated) {
 }
 
 /** Subscribes to order changes. Returns the function that unsubscribes. */
+const openStreams = new Set<() => void>()
+
+/** Registers a stream so shutdown can close it. Returns the deregister. */
+export function trackStream(close: () => void) {
+  openStreams.add(close)
+  return () => openStreams.delete(close)
+}
+
+/** Long-lived streams keep the server open, so shutdown has to end them. */
+export function closeAllStreams() {
+  for (const close of openStreams) close()
+  openStreams.clear()
+}
+
 export function onOrderUpdated(handler: (payload: OrderUpdated) => void) {
   bus.on(CHANNEL, handler)
   return () => bus.off(CHANNEL, handler)

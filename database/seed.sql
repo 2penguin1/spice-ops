@@ -38,14 +38,16 @@ WITH numbered_customers AS (
 planned AS (
   SELECT
     g,
-    -- Lunch and dinner, three orders a day, so "when orders arrive" shows a
-    -- service pattern rather than an artefact of the generator.
-    date_trunc('day', now())
+    -- Lunch and dinner in the restaurant's own time, three orders a day, so the
+    -- "when orders arrive" chart shows a service pattern rather than an
+    -- artefact of the generator. Built in local time and then converted, or a
+    -- UTC server would put lunch at half past five in the evening.
+    (date_trunc('day', now() AT TIME ZONE 'Asia/Kolkata')
       - make_interval(days => (g / 3)::int)
       + make_interval(
           hours => (ARRAY[12, 13, 14, 19, 20, 21])[(g % 6) + 1],
           mins  => (g * 17) % 60
-        ) AS placed_at,
+        )) AT TIME ZONE 'Asia/Kolkata' AS placed_at,
     CASE
       WHEN g % 15 = 0 THEN 'CANCELLED'
       WHEN g <= 3     THEN 'CONFIRMED'

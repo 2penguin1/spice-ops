@@ -1,11 +1,11 @@
-import { count, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { z } from 'zod'
 
 import { db } from '../db/client.ts'
 import { staff, staffRole } from '../db/schema.ts'
 import { ApiError } from '../lib/errors.ts'
-import { hashPassword, requireRole, type AuthVariables } from '../lib/auth.ts'
+import { hashPassword, requireRole, type AuthVariables, type Staff } from '../lib/auth.ts'
 import { paginationMeta, paginationQuery, toLimitOffset, uuidParam, validate } from '../lib/validation.ts'
 
 const staffBody = z.object({
@@ -17,6 +17,22 @@ const staffBody = z.object({
 
 const patchBody = staffBody.partial()
 
+/**
+ * Only an admin hands out admin. Without this a manager could mint an admin
+ * account, promote themselves, or reset an admin's password and take it over.
+ */
+function assertMayGrant(actor: Staff, changes: { role?: string; password?: string }, targetId?: string) {
+  if (actor.role === 'ADMIN') return
+
+  if (changes.role) {
+    throw new ApiError('FORBIDDEN', 'Only an admin can set a role')
+  }
+
+  if (changes.password && targetId !== actor.id) {
+    throw new ApiError('FORBIDDEN', "Only an admin can change someone else's password")
+  }
+}
+
 /** The password hash never leaves the server, so it is stripped here. */
 const toStaff = (row: typeof staff.$inferSelect) => ({
   id: row.id,
@@ -27,6 +43,24 @@ const toStaff = (row: typeof staff.$inferSelect) => ({
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
 })
+
+/** Refuses a change that would leave nobody able to administer the system. */
+async function assertNotLastAdmin(id: string, changes: { role?: string; isActive?: boolean }) {
+  const losesAdmin = (changes.role && changes.role !== 'ADMIN') || changes.isActive === false
+  if (!losesAdmin) return
+
+  const [target] = await db.select({ role: staff.role }).from(staff).where(eq(staff.id, id))
+  if (target?.role !== 'ADMIN') return
+
+  const [tally] = await db
+    .select({ admins: count() })
+    .from(staff)
+    .where(and(eq(staff.role, 'ADMIN'), eq(staff.isActive, true)))
+
+  if ((tally?.admins ?? 0) <= 1) {
+    throw ApiError.validation('This is the last active admin. Promote someone else first.')
+  }
+}
 
 export const staffRoutes = new Hono<{ Variables: AuthVariables }>()
 
@@ -44,13 +78,14 @@ export const staffRoutes = new Hono<{ Variables: AuthVariables }>()
 
   .post('/', requireRole('ADMIN', 'MANAGER'), validate('json', staffBody), async (c) => {
     const body = c.req.valid('json')
+    assertMayGrant(c.get('staff'), body)
 
     const [created] = await db
       .insert(staff)
       .values({
         name: body.name,
         email: body.email,
-        passwordHash: hashPassword(body.password),
+        passwordHash: await hashPassword(body.password),
         role: body.role,
       })
       .returning()
@@ -65,12 +100,16 @@ export const staffRoutes = new Hono<{ Variables: AuthVariables }>()
     validate('json', patchBody.extend({ isActive: z.boolean().optional() })),
     async (c) => {
       const { id } = c.req.valid('param')
-      const { password, ...rest } = c.req.valid('json')
+      const changes_ = c.req.valid('json')
+      const { password, ...rest } = changes_
+
+      assertMayGrant(c.get('staff'), changes_, id)
+      await assertNotLastAdmin(id, changes_)
+
+      const passwordChange = password ? { passwordHash: await hashPassword(password) } : {}
 
       const changes = Object.fromEntries(
-        Object.entries({ ...rest, ...(password ? { passwordHash: hashPassword(password) } : {}) }).filter(
-          ([, value]) => value !== undefined,
-        ),
+        Object.entries({ ...rest, ...passwordChange }).filter(([, value]) => value !== undefined),
       )
 
       if (Object.keys(changes).length === 0) {
@@ -96,6 +135,8 @@ export const staffRoutes = new Hono<{ Variables: AuthVariables }>()
     if (id === c.get('staff').id) {
       throw ApiError.validation('You cannot delete your own account')
     }
+
+    await assertNotLastAdmin(id, { role: 'REMOVED' })
 
     const deleted = await db.delete(staff).where(eq(staff.id, id)).returning({ id: staff.id })
     if (deleted.length === 0) throw ApiError.notFound('Staff member')

@@ -1,8 +1,9 @@
-import { and, asc, eq, lt, sql } from 'drizzle-orm'
+import { and, eq, lt, sql } from 'drizzle-orm'
 
 import { config } from '../config.ts'
 import { db } from '../db/client.ts'
 import { notifications } from '../db/schema.ts'
+import { prune as pruneIdempotencyKeys } from './idempotency.ts'
 import type { Tx } from './orders.tx.ts'
 import type { OrderStatus } from './status.ts'
 
@@ -92,37 +93,38 @@ export function queueNotification(
 
 // ─── Draining ────────────────────────────────────────────────────────────────
 
-/**
- * Claims one message so that two workers cannot send it twice.
- *
- * The guard is in the WHERE clause, the same shape as the order status update:
- * whoever changes the row owns it, and everyone else gets zero rows.
- */
-async function claim(id: string) {
-  const [claimed] = await db
-    .update(notifications)
-    .set({ status: 'SENDING', attempts: sql`${notifications.attempts} + 1` })
-    .where(and(eq(notifications.id, id), eq(notifications.status, 'PENDING')))
-    .returning()
+type Claimed = { id: string; recipient: string; body: string; attempts: number }
 
-  return claimed
+/**
+ * Takes a batch of messages in one statement.
+ *
+ * SKIP LOCKED lets a second worker step over rows this one is already holding,
+ * so two workers never send the same message and neither waits on the other.
+ */
+async function claimBatch(): Promise<Claimed[]> {
+  const { rows } = await db.execute(sql`
+    UPDATE notifications SET
+      status = 'SENDING',
+      attempts = attempts + 1,
+      claimed_at = now()
+    WHERE id IN (
+      SELECT id FROM notifications
+      WHERE status = 'PENDING'
+      ORDER BY created_at
+      LIMIT ${BATCH}
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id, recipient, body, attempts
+  `)
+
+  return rows as unknown as Claimed[]
 }
 
-export async function drainOnce(): Promise<{ sent: number; failed: number }> {
-  const pending = await db
-    .select({ id: notifications.id })
-    .from(notifications)
-    .where(eq(notifications.status, 'PENDING'))
-    .orderBy(asc(notifications.createdAt))
-    .limit(BATCH)
-
+async function drainOnce(): Promise<{ sent: number; failed: number }> {
   let sent = 0
   let failed = 0
 
-  for (const row of pending) {
-    const message = await claim(row.id)
-    if (!message) continue // Another worker took it.
-
+  for (const message of await claimBatch()) {
     try {
       await driver.send({ recipient: message.recipient, body: message.body })
 
@@ -150,9 +152,10 @@ export async function drainOnce(): Promise<{ sent: number; failed: number }> {
 }
 
 /**
- * Recovers messages left mid-flight by a process that died between claiming
- * one and recording the outcome. Without this they would sit in SENDING for
- * ever, which is the failure mode an outbox exists to prevent.
+ * Frees messages left in SENDING by a process that died mid-send.
+ *
+ * Compares claimed_at, not created_at: an old message being sent right now has
+ * an old created_at, and resetting it would send the customer a second copy.
  */
 async function recoverStuck() {
   const cutoff = new Date(Date.now() - 60_000)
@@ -160,20 +163,32 @@ async function recoverStuck() {
   await db
     .update(notifications)
     .set({ status: 'PENDING' })
-    .where(and(eq(notifications.status, 'SENDING'), lt(notifications.createdAt, cutoff)))
+    .where(and(eq(notifications.status, 'SENDING'), lt(notifications.claimedAt, cutoff)))
 }
 
 let timer: ReturnType<typeof setInterval> | undefined
+let draining = false
 
 export function startNotificationWorker() {
   if (timer) return
 
   console.log(`Notifications: ${driver.name} driver, draining every ${DRAIN_INTERVAL_MS / 1000}s`)
 
-  timer = setInterval(() => {
-    void recoverStuck()
-      .then(drainOnce)
-      .catch((error) => console.error('Notification drain failed:', (error as Error).message))
+  timer = setInterval(async () => {
+    // A slow provider can make one cycle outlast the interval. Without this
+    // the cycles pile up and race each other over the same rows.
+    if (draining) return
+    draining = true
+
+    try {
+      await recoverStuck()
+      await drainOnce()
+      await pruneIdempotencyKeys()
+    } catch (error) {
+      console.error('Notification drain failed:', (error as Error).message)
+    } finally {
+      draining = false
+    }
   }, DRAIN_INTERVAL_MS)
 
   // The drain alone must not hold the process open at shutdown.

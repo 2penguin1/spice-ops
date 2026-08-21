@@ -9,6 +9,8 @@ import { ApiError } from '../lib/errors.ts'
 import { toCustomer } from '../lib/serialize.ts'
 import {
   paginationMeta,
+  searchTerm,
+  shortText,
   paginationQuery,
   toLimitOffset,
   uuidParam,
@@ -17,13 +19,13 @@ import {
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
-const listQuery = paginationQuery.extend({ search: z.string().trim().min(1).optional() })
+const listQuery = paginationQuery.extend({ search: searchTerm })
 
 const customerBody = z.object({
-  name: z.string().trim().min(1),
+  name: shortText(120),
   // The contract types email as `string | null`, so null is a value, not an absence.
-  email: z.email().nullable().optional(),
-  phone: z.string().trim().min(1),
+  email: z.email().max(160).nullable().optional(),
+  phone: shortText(30),
 })
 
 const patchBody = customerBody.partial()

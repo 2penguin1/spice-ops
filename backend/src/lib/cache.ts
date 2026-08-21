@@ -18,7 +18,6 @@ client?.on('error', (error) => console.error('Redis cache:', error.message))
 
 const VERSION_KEY = 'analytics:version'
 
-let version: string | null = null
 
 /**
  * Invalidation by version, not by deletion.
@@ -29,19 +28,20 @@ let version: string | null = null
  */
 export async function invalidateAnalytics() {
   if (!client) return
+
   try {
-    version = String(await client.incr(VERSION_KEY))
+    await client.incr(VERSION_KEY)
   } catch {
-    // A cache that cannot be invalidated must not break a write. Forget the
-    // version so the next read re-reads it.
-    version = null
+    // A cache that cannot be invalidated must not break a write.
   }
 }
 
+/**
+ * Read every time, never remembered: a second API process bumps this key, and
+ * a remembered value would keep serving what that process just invalidated.
+ */
 async function currentVersion(): Promise<string> {
-  if (version !== null) return version
-  version = String((await client!.get(VERSION_KEY)) ?? '1')
-  return version
+  return String((await client!.get(VERSION_KEY)) ?? '1')
 }
 
 /** Runs `load`, or returns the cached result of a recent identical call. */

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 
-import { onOrderUpdated } from '../lib/events.ts'
+import { onOrderUpdated, trackStream } from '../lib/events.ts'
 import { ApiError } from '../lib/errors.ts'
 import { requireAuth, verifyStreamTicket, type AuthVariables } from '../lib/auth.ts'
 
@@ -31,15 +31,21 @@ export const eventRoutes = new Hono<{ Variables: AuthVariables }>()
     await verifyStreamTicket(ticket)
 
     return streamSSE(c, async (stream) => {
+      let finish: () => void = () => {}
+
       const unsubscribe = onOrderUpdated((payload) => {
         // The frame carries an id, not the order. The client refetches, which
         // keeps authorization on the fetch path and the response shape in one
         // place.
-        void stream.writeSSE({ event: 'order:updated', data: JSON.stringify(payload) })
+        // A write to a socket the peer already dropped rejects; unhandled,
+        // that takes the process down.
+        void stream
+          .writeSSE({ event: 'order:updated', data: JSON.stringify(payload) })
+          .catch(() => finish())
       })
 
       const heartbeat = setInterval(() => {
-        void stream.writeSSE({ event: 'ping', data: '' })
+        void stream.writeSSE({ event: 'ping', data: '' }).catch(() => finish())
       }, HEARTBEAT_MS)
 
       await stream.writeSSE({ event: 'ready', data: JSON.stringify({ ok: true }) })
@@ -49,10 +55,18 @@ export const eventRoutes = new Hono<{ Variables: AuthVariables }>()
       // overflows above 2^31-1 milliseconds and fires immediately, which would
       // hang up on every screen the moment it connected.
       await new Promise<void>((resolve) => {
+        finish = resolve
+        const untrack = trackStream(() => {
+          clearInterval(heartbeat)
+          unsubscribe()
+          resolve()
+        })
+
         // Also the only cleanup point — without it every reconnect leaves its
         // listener and timer behind, a leak that grows for as long as the
         // process runs.
         stream.onAbort(() => {
+          untrack()
           clearInterval(heartbeat)
           unsubscribe()
           resolve()

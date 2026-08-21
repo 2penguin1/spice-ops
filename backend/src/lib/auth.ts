@@ -1,4 +1,5 @@
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
+import { promisify } from 'node:util'
 
 import { eq } from 'drizzle-orm'
 import { createMiddleware } from 'hono/factory'
@@ -12,11 +13,24 @@ import type { OrderStatus } from './status.ts'
 
 export type Role = (typeof staffRole.enumValues)[number]
 
-export type Staff = { id: string; name: string; role: Role }
+export type Staff = {
+  id: string
+  name: string
+  role: Role
+  /** False for the AUTH_DISABLED stand-in, which has no row in `staff`. */
+  persisted: boolean
+}
+
+/** The id to attribute a change to, or null when there is no real account behind it. */
+export const attributableId = (member: Staff) => (member.persisted ? member.id : null)
 
 export type AuthVariables = { staff: Staff }
 
 const secret = new TextEncoder().encode(config.JWT_SECRET)
+
+// Async, not scryptSync: hashing takes ~100ms, and doing it synchronously
+// on an unauthenticated route stalls every other request in the process.
+const derive = promisify(scrypt) as (p: string, s: string, len: number) => Promise<Buffer>
 
 const TOKEN_LIFETIME = '12h'
 
@@ -30,16 +44,16 @@ const TOKEN_LIFETIME = '12h'
  *
  * Stored as `scrypt$<salt>$<hash>` so the parameters travel with the hash.
  */
-export function hashPassword(password: string): string {
+export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString('hex')
-  return `scrypt$${salt}$${scryptSync(password, salt, 64).toString('hex')}`
+  return `scrypt$${salt}$${(await derive(password, salt, 64)).toString('hex')}`
 }
 
-export function verifyPassword(password: string, stored: string): boolean {
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [scheme, salt, expected] = stored.split('$')
   if (scheme !== 'scrypt' || !salt || !expected) return false
 
-  const actual = scryptSync(password, salt, 64)
+  const actual = await derive(password, salt, 64)
   const expectedBuffer = Buffer.from(expected, 'hex')
 
   if (actual.length !== expectedBuffer.length) return false
@@ -75,6 +89,7 @@ async function staffFromToken(token: string): Promise<Staff> {
       id: String(payload.sub),
       name: String(payload.name),
       role: payload.role as Role,
+      persisted: true,
     }
   } catch {
     throw new ApiError('UNAUTHORIZED', 'Your session has expired. Sign in again.')
@@ -106,7 +121,12 @@ export async function verifyStreamTicket(ticket: string): Promise<Staff> {
     // anything else.
     if (payload.scope !== 'events') throw new Error('wrong scope')
 
-    return { id: String(payload.sub), name: String(payload.name), role: payload.role as Role }
+    return {
+      id: String(payload.sub),
+      name: String(payload.name),
+      role: payload.role as Role,
+      persisted: true,
+    }
   } catch {
     throw new ApiError('UNAUTHORIZED', 'That stream ticket is not valid. Reconnecting.')
   }
@@ -119,6 +139,7 @@ const CONTRACT_TESTER: Staff = {
   id: '00000000-0000-4000-8000-000000000000',
   name: 'Auth disabled',
   role: 'ADMIN',
+  persisted: false,
 }
 
 export const requireAuth = createMiddleware<{ Variables: AuthVariables }>(async (c, next) => {
@@ -183,6 +204,9 @@ export function assertCanSetStatus(member: Staff, to: OrderStatus) {
 
 // ─── Sign in ─────────────────────────────────────────────────────────────────
 
+/** A real hash to compare against when the email is unknown, so timing matches. */
+const DUMMY_HASH = `scrypt$${'0'.repeat(32)}$${'0'.repeat(128)}`
+
 export async function authenticate(email: string, password: string): Promise<Staff> {
   const [found] = await db.select().from(staff).where(eq(staff.email, email.toLowerCase()))
 
@@ -190,8 +214,13 @@ export async function authenticate(email: string, password: string): Promise<Sta
   // which email addresses exist.
   const rejected = new ApiError('UNAUTHORIZED', 'Those details do not match an account')
 
-  if (!found || !found.isActive) throw rejected
-  if (!verifyPassword(password, found.passwordHash)) throw rejected
+  // Hash even when there is no account, so an unknown email takes as long as a
+  // wrong password. Returning early here is a timing oracle for which addresses
+  // exist, which is exactly what the shared message is meant to prevent.
+  const stored = found?.passwordHash ?? DUMMY_HASH
+  const correct = await verifyPassword(password, stored)
 
-  return { id: found.id, name: found.name, role: found.role }
+  if (!found || !found.isActive || !correct) throw rejected
+
+  return { id: found.id, name: found.name, role: found.role, persisted: true }
 }
