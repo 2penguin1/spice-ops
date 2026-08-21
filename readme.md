@@ -69,8 +69,19 @@ npm run dev               # http://localhost:5173
 
 ### 4. Open it
 
-**<http://localhost:5173>** — you should see 40 seeded orders across all five
-statuses.
+**<http://localhost:5173>** — sign in with any of the four seeded accounts.
+
+| Sign in as | Email | Password | Sees |
+|---|---|---|---|
+| **Manager** | `manager@spice.test` | `spice123` | everything — start here |
+| **Kitchen** | `cook@spice.test` | `spice123` | starts prep, marks ready. No customers, no order taking |
+| **Service** | `server@spice.test` | `spice123` | takes orders, completes them. Cannot cancel |
+| **Admin** | `admin@spice.test` | `spice123` | everything, plus staff |
+
+Signing in as each shows a different set of controls — that is the point of the
+role model, and the quickest way to see it working.
+
+You should see 40 seeded orders across all five statuses.
 
 ---
 
@@ -85,11 +96,12 @@ cd backend
 npm run smoke
 ```
 
-This walks the full order lifecycle and every error case the contract
-documents — 60 checks — then deletes the data it created. It should end with:
+This signs in as each role, walks the full order lifecycle, and exercises every
+error case the contract documents plus the role rules — 99 checks — then
+deletes the data it created. It should end with:
 
 ```
-60/60 checks passed
+99/99 checks passed
 Contract intact.
 ```
 
@@ -102,11 +114,21 @@ npm run check             # typecheck + 26 tests, no database needed
 
 ### By hand
 
+`/health` is open. Everything else needs a token:
+
 ```bash
 curl http://localhost:3000/health
-curl "http://localhost:3000/orders?status=READY&size=2"
-curl http://localhost:3000/customers
+
+TOKEN=$(curl -s -X POST http://localhost:3000/auth/login -H 'content-type: application/json' -d '{"email":"manager@spice.test","password":"spice123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:3000/orders?status=READY&size=2"
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/customers
 ```
+
+**Checking the contract without tokens.** Set `AUTH_DISABLED=true` in
+`backend/.env` and restart. Every route then accepts anonymous requests, so the
+contract can be tested with plain `curl`. The server refuses to start with that
+flag under `NODE_ENV=production`, and warns on every boot.
 
 ---
 
@@ -117,7 +139,10 @@ curl http://localhost:3000/customers
 | **Orders** | `/orders` | Search by order number, customer name or phone. Filter by status. Paginated. Filters live in the URL, so a filtered view can be shared. |
 | **Order** | `/orders/:id` | The order as a kitchen ticket. Advance its status, add and remove items, see the customer. Only legal next moves are offered. |
 | **Take an order** | `/orders/new` | Pick dishes from the menu, then either attach an existing customer or enter a new one. |
-| **Customers** | `/customers` | Search, add, edit and delete. |
+| **Customers** | `/customers` | Search, add, edit and delete. Hidden from the kitchen. |
+
+Each order also shows its **history** — every status it has been through, when,
+and which staff member moved it.
 
 ---
 
@@ -128,8 +153,8 @@ spice-ops/
 ├── backend/              Hono API
 │   ├── src/
 │   │   ├── db/           schema.ts is the single source of truth for tables
-│   │   ├── lib/          errors, validation, status machine, serializers
-│   │   ├── routes/       customers.ts, orders.ts
+│   │   ├── lib/          errors, validation, status machine, auth, serializers
+│   │   ├── routes/       customers.ts, orders.ts, auth.ts, staff.ts
 │   │   ├── config.ts     environment, validated at boot
 │   │   └── index.ts      app assembly and graceful shutdown
 │   ├── scripts/          smoke.ts, build-schema.ts
@@ -139,8 +164,8 @@ spice-ops/
 │       ├── api/          client and contract types
 │       ├── components/   status, pagination, errors, skeletons
 │       ├── hooks/        useApi, useDebounced
-│       ├── lib/          menu, formatting, client-side status hints
-│       └── pages/        Orders, OrderDetail, NewOrder, Customers
+│       ├── lib/          menu, formatting, auth context, role hints
+│       └── pages/        Login, Orders, OrderDetail, NewOrder, Customers
 ├── database/
 │   ├── schema.sql        consolidated DDL (generated — do not hand-edit)
 │   ├── seed.sql          deterministic seed data
@@ -175,9 +200,36 @@ Base URL `http://localhost:3000`. Full detail in
 | `DELETE` | `/orders/{id}/items/{itemId}` | Remove an item, returns the whole order |
 | `GET` | `/health` | Liveness and database reachability |
 
+Beyond the assignment contract:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/auth/login` | Exchange credentials for a 12 hour token |
+| `GET` | `/auth/me` | The current token's owner |
+| `GET` | `/orders/{id}/timeline` | Every status the order has been through, and who moved it |
+| `GET/POST/PATCH/DELETE` | `/staff` | Staff management |
+
 Every success is wrapped in `{ "data": … }`, with
 `"meta": { "pagination": … }` on list endpoints. Every failure is
 `{ "error": { "code": …, "message": … } }`.
+
+### Who can do what
+
+Reading is open to any signed-in role. These are the actions:
+
+| Action | Admin | Manager | Service | Kitchen |
+|---|:--:|:--:|:--:|:--:|
+| Take an order, add or remove items | ✓ | ✓ | ✓ | — |
+| Start prep, mark ready | ✓ | ✓ | — | ✓ |
+| Complete an order | ✓ | ✓ | ✓ | — |
+| Cancel an order | ✓ | ✓ | — | — |
+| Add or edit a customer | ✓ | ✓ | ✓ | — |
+| Delete a customer | ✓ | ✓ | — | — |
+| Manage staff | ✓ | ✓ (no deleting) | — | — |
+
+A refused action returns `403 FORBIDDEN`. A missing or expired token returns
+`401 UNAUTHORIZED`. Neither appears on a contract route for a caller with a
+valid token and the right role.
 
 ### Order lifecycle
 
@@ -227,7 +279,7 @@ Run from `frontend/`:
 | Variable | Required | Default | Notes |
 |---|---|---|---|
 | `DATABASE_URL` | **yes** | — | Boot fails with a clear message if missing |
-| `JWT_SECRET` | **yes** | — | Reserved for the auth work; must be set |
+| `JWT_SECRET` | **yes** | — | Signs the login tokens. Any long random string locally |
 | `PORT` | no | `3000` | |
 | `CORS_ORIGIN` | no | `http://localhost:5173` | The web app's origin |
 | `REDIS_URL` | no | — | Absent: no cache, one warning at boot |

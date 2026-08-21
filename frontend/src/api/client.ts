@@ -1,6 +1,17 @@
+import type { Role } from '../lib/permissions'
 import type { Customer, OrderDetail, OrderEvent, OrderStatus, Page } from './types'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+
+/**
+ * Held in a module variable rather than read from storage on every call, so
+ * there is one place that decides what is sent.
+ */
+let token: string | null = null
+
+export function setAuthToken(next: string | null) {
+  token = next
+}
 
 /** The server's error envelope, rethrown so components can show `message` directly. */
 export class ApiError extends Error {
@@ -19,10 +30,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
 
   try {
-    response = await fetch(`${BASE}${path}`, {
-      ...init,
-      headers: init?.body ? { 'content-type': 'application/json' } : {},
-    })
+    const headers: Record<string, string> = {}
+    if (init?.body) headers['content-type'] = 'application/json'
+    if (token) headers.Authorization = `Bearer ${token}`
+
+    response = await fetch(`${BASE}${path}`, { ...init, headers })
   } catch {
     // fetch only rejects when the request never reached the server.
     throw new ApiError('NETWORK_ERROR', `Cannot reach the API at ${BASE}. Is the server running?`, 0)
@@ -31,6 +43,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (response.status === 204) return undefined as T
 
   const body = await response.json().catch(() => null)
+
+  if (response.status === 401 && !path.startsWith('/auth/login')) {
+    // The token expired or was revoked. Tell the app once, rather than letting
+    // every screen fail on its own.
+    window.dispatchEvent(new Event('spice:unauthorized'))
+  }
 
   if (!response.ok) {
     throw new ApiError(
@@ -73,6 +91,14 @@ export type NewOrder = {
 }
 
 export const api = {
+  auth: {
+    login: (email: string, password: string) =>
+      data<{ token: string; staff: { id: string; name: string; role: Role } }>(
+        '/auth/login',
+        post({ email, password }),
+      ),
+  },
+
   health: () => data<{ status: string; db: string }>('/health'),
 
   orders: {

@@ -1,11 +1,19 @@
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
+import { useAuth } from './lib/auth'
+import { canEditCustomers, canTakeOrders } from './lib/permissions'
 import { Customers } from './pages/Customers'
+import { Login } from './pages/Login'
 import { NewOrder } from './pages/NewOrder'
 import { OrderDetail } from './pages/OrderDetail'
 import { Orders } from './pages/Orders'
 
 export default function App() {
+  const { staff, signOut } = useAuth()
+
+  // Nothing renders until someone is signed in.
+  if (!staff) return <Login />
+
   return (
     <>
       <header className="topbar">
@@ -16,19 +24,35 @@ export default function App() {
           <NavLink to="/orders" className={({ isActive }) => (isActive ? 'active' : '')}>
             Orders
           </NavLink>
-          <NavLink to="/customers" className={({ isActive }) => (isActive ? 'active' : '')}>
-            Customers
-          </NavLink>
+          {canEditCustomers(staff.role) && (
+            <NavLink to="/customers" className={({ isActive }) => (isActive ? 'active' : '')}>
+              Customers
+            </NavLink>
+          )}
         </nav>
+
+        <div className="whoami">
+          <span>{staff.name}</span>
+          <span className="role-chip">{staff.role}</span>
+          <button type="button" className="link-btn" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
       </header>
 
       <main>
         <Routes>
           <Route path="/" element={<Navigate to="/orders" replace />} />
           <Route path="/orders" element={<Orders />} />
-          <Route path="/orders/new" element={<NewOrder />} />
+          <Route
+            path="/orders/new"
+            element={canTakeOrders(staff.role) ? <NewOrder /> : <Navigate to="/orders" replace />}
+          />
           <Route path="/orders/:id" element={<OrderDetail />} />
-          <Route path="/customers" element={<Customers />} />
+          <Route
+            path="/customers"
+            element={canEditCustomers(staff.role) ? <Customers /> : <Navigate to="/orders" replace />}
+          />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

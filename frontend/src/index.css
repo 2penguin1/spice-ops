@@ -537,6 +537,62 @@ tbody tr.clickable:hover td {
   margin: 0;
 }
 
+/* ── Sign in ───────────────────────────────────────────────────────────── */
+
+.signin {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.signin-card {
+  width: 100%;
+  max-width: 420px;
+}
+
+.signin-card h1 {
+  font-size: 26px;
+  margin-bottom: 4px;
+}
+
+.signin-card .field {
+  margin-top: 14px;
+}
+
+.demo-accounts {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  font-size: 13px;
+}
+
+.demo-accounts li {
+  padding: 3px 0;
+}
+
+.whoami {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #b9c2c9;
+}
+
+.whoami .link-btn {
+  color: #b9c2c9;
+}
+
+.role-chip {
+  padding: 2px 7px;
+  border: 1px solid #3d474f;
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: #e6e2d8;
+}
+
 /* ── Timeline ──────────────────────────────────────────────────────────── */
 
 .timeline {

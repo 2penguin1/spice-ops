@@ -7,11 +7,14 @@ import { Pagination } from '../components/Pagination'
 import { SkeletonRows } from '../components/Skeleton'
 import { StatusBadge } from '../components/StatusBadge'
 import { useApi, useDebounced } from '../hooks/useApi'
+import { useAuth } from '../lib/auth'
+import { canTakeOrders } from '../lib/permissions'
 import { formatAge, formatMoney } from '../lib/format'
 
 const SIZE = 20
 
 export function Orders() {
+  const { staff } = useAuth()
   // Filters live in the URL, so a filtered view can be shared and the back
   // button behaves the way people expect.
   const [params, setParams] = useSearchParams()
@@ -48,9 +51,11 @@ export function Orders() {
           <p className="eyebrow">Service floor</p>
           <h1>Orders</h1>
         </div>
-        <Link className="btn" to="/orders/new">
-          Take an order
-        </Link>
+        {canTakeOrders(staff!.role) && (
+          <Link className="btn" to="/orders/new">
+            Take an order
+          </Link>
+        )}
       </div>
 
       <div className="toolbar">
@@ -133,9 +138,11 @@ export function Orders() {
                 Clear filters
               </button>
             ) : (
-              <Link className="btn" to="/orders/new">
-                Take an order
-              </Link>
+              canTakeOrders(staff!.role) && (
+                <Link className="btn" to="/orders/new">
+                  Take an order
+                </Link>
+              )
             )}
           </div>
         )}

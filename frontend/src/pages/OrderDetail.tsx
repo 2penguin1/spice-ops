@@ -9,6 +9,8 @@ import { Timeline } from '../components/Timeline'
 import { useApi } from '../hooks/useApi'
 import { formatAge, formatMoney, formatWhen } from '../lib/format'
 import { MENU } from '../lib/menu'
+import { useAuth } from '../lib/auth'
+import { canSetStatus, canTakeOrders } from '../lib/permissions'
 import { ACTION_LABEL, nextStatuses } from '../lib/status'
 
 const SPINE: Record<OrderStatus, string> = {
@@ -20,6 +22,7 @@ const SPINE: Record<OrderStatus, string> = {
 }
 
 export function OrderDetail() {
+  const { staff } = useAuth()
   const { id = '' } = useParams()
   const { data, error, loading, reload } = useApi(() => api.orders.get(id), [id])
 
@@ -56,7 +59,10 @@ export function OrderDetail() {
   }
   if (!current) return null
 
-  const moves = nextStatuses(current.status)
+  // Only the moves this role is allowed to make. The server re-checks.
+  const allMoves = nextStatuses(current.status)
+  const moves = allMoves.filter((next) => canSetStatus(staff!.role, next))
+  const mayEditItems = canTakeOrders(staff!.role)
 
   return (
     <div className="page">
@@ -103,14 +109,18 @@ export function OrderDetail() {
                     <div className="muted line-unit num">{formatMoney(item.unitPrice)} each</div>
                   </span>
                   <span className="num">{formatMoney(item.totalPrice)}</span>
-                  <button
-                    className="link-btn"
-                    disabled={busy}
-                    onClick={() => run(() => api.orders.removeItem(current.id, item.id))}
-                    aria-label={`Remove ${item.itemName}`}
-                  >
-                    Remove
-                  </button>
+                  {mayEditItems ? (
+                    <button
+                      className="link-btn"
+                      disabled={busy}
+                      onClick={() => run(() => api.orders.removeItem(current.id, item.id))}
+                      aria-label={`Remove ${item.itemName}`}
+                    >
+                      Remove
+                    </button>
+                  ) : (
+                    <span />
+                  )}
                 </div>
               ))}
             </div>
@@ -130,7 +140,9 @@ export function OrderDetail() {
             <h2>Move this order on</h2>
             {moves.length === 0 ? (
               <p className="muted small" style={{ margin: 0 }}>
-                This order is {current.status.toLowerCase()}. Nothing further to do.
+                {allMoves.length === 0
+                  ? `This order is ${current.status.toLowerCase()}. Nothing further to do.`
+                  : `Moving a ${current.status.toLowerCase()} order on is not your role.`}
               </p>
             ) : (
               <div className="actions">
@@ -165,7 +177,9 @@ export function OrderDetail() {
             </div>
           </div>
 
-          <AddItem busy={busy} onAdd={(item) => run(() => api.orders.addItem(current.id, item))} />
+          {mayEditItems && (
+            <AddItem busy={busy} onAdd={(item) => run(() => api.orders.addItem(current.id, item))} />
+          )}
 
           <Timeline orderId={current.id} status={current.status} />
         </div>
