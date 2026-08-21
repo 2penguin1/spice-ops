@@ -6,6 +6,7 @@ import type {
   OrderDetail,
   OrderEvent,
   OrderStatus,
+  Insights,
   Page,
   StaffPoint,
   Summary,
@@ -116,6 +117,7 @@ export const api = {
     hours: () => data<HourPoint[]>('/analytics/hours'),
     staff: () => data<StaffPoint[]>('/analytics/staff'),
     items: () => data<TopItem[]>('/analytics/items'),
+    insights: () => data<Insights>('/analytics/insights'),
   },
 
   events: {

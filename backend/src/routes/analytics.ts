@@ -5,6 +5,7 @@ import { cached } from '../lib/cache.ts'
 import { requireRole, type AuthVariables } from '../lib/auth.ts'
 import { validate } from '../lib/validation.ts'
 import * as analytics from '../services/analytics.service.ts'
+import { insights } from '../services/ai.service.ts'
 
 // Long enough to absorb a dashboard poll, short enough that nobody makes a
 // decision on a stale number.
@@ -32,3 +33,23 @@ export const analyticsRoutes = new Hono<{ Variables: AuthVariables }>()
   .get('/items', async (c) =>
     c.json({ data: await cached('items', TTL_SECONDS, () => analytics.topItems(8)) }),
   )
+
+  /**
+   * A written read of the same numbers. Cached far longer than the figures
+   * themselves — they do not move fast enough to justify a model call per page
+   * load, and each one costs money and a second of latency.
+   */
+  .get('/insights', async (c) => {
+    const data = await cached('insights', 15 * 60, async () => {
+      const [summary, daily, hours, items] = await Promise.all([
+        analytics.summary(),
+        analytics.daily(14),
+        analytics.byHour(),
+        analytics.topItems(8),
+      ])
+
+      return insights({ summary, daily, hours, items })
+    })
+
+    return c.json({ data })
+  })

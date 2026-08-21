@@ -70,6 +70,8 @@ export type StaffPoint = {
 }
 export type TopItem = { itemName: string; quantity: number; revenue: number }
 
+export type Insights = { narrative: string | null; model: string | null; unavailable: string | null }
+
 export type Pagination = { page: number; size: number; total: number; totalPages: number }
 
 export type Page<T> = { data: T[]; meta: { pagination: Pagination } }

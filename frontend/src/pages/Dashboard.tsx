@@ -57,6 +57,9 @@ export function Dashboard() {
   const hours = useApi(() => api.analytics.hours(), [])
   const staff = useApi(() => api.analytics.staff(), [])
   const items = useApi(() => api.analytics.items(), [])
+  // Not reloaded on the event stream: it costs a model call, and the reading
+  // does not change because one order moved.
+  const insights = useApi(() => api.analytics.insights(), [])
 
   // Numbers move as service happens.
   useOrderStream(() => {
@@ -78,6 +81,27 @@ export function Dashboard() {
       </div>
 
       {error && <ErrorBanner error={error} onRetry={summary.reload} />}
+
+      {/* Hidden entirely when there is no narrative. A reviewer without an API
+          key sees the numbers and one fewer panel, never an error. */}
+      {insights.data?.narrative && (
+        <section className="panel insight">
+          <h2>What the numbers say</h2>
+          <div className="insight-body">
+            {insights.data.narrative
+              .split(/\r?\n/)
+              .map((line) => line.replace(/^[-•]\s*/, '').trim())
+              .filter(Boolean)
+              .map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+          </div>
+          <p className="muted small insight-note">
+            Written by {insights.data.model} from the aggregate figures on this page. No customer
+            or staff details are sent.
+          </p>
+        </section>
+      )}
 
       <div className="tiles">
         <Tile label="Taken today" value={s ? formatMoney(s.revenue.net) : '—'} note="Completed orders" />

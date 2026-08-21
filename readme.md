@@ -100,11 +100,11 @@ npm run smoke
 
 This signs in as each role, walks the full order lifecycle, and exercises every
 error case the contract documents plus the role rules and the live stream —
-120 checks — then
+123 checks — then
 deletes the data it created. It should end with:
 
 ```
-120/120 checks passed
+123/123 checks passed
 Contract intact.
 ```
 
@@ -142,7 +142,7 @@ flag under `NODE_ENV=production`, and warns on every boot.
 | **Orders** | `/orders` | Search by order number, customer name or phone. Filter by status. Paginated. Filters live in the URL, so a filtered view can be shared. |
 | **Order** | `/orders/:id` | The order as a kitchen ticket. Advance its status, add and remove items, see the customer. Only legal next moves are offered. |
 | **Take an order** | `/orders/new` | Pick dishes from the menu, then either attach an existing customer or enter a new one. |
-| **Dashboard** | `/dashboard` | Revenue, order volume, service pattern, status mix, per-cook speed, top dishes. Managers and admins only. |
+| **Dashboard** | `/dashboard` | Revenue, order volume, service pattern, status mix, per-cook speed, top dishes, and — with an AI key configured — a written read of them. Managers and admins only. |
 | **Kitchen** | `/kitchen` | Live board: waiting, cooking, ready. One-click advance. Updates on its own when anyone changes an order. |
 | **Customers** | `/customers` | Search, add, edit and delete. Hidden from the kitchen. |
 
@@ -220,6 +220,7 @@ Beyond the assignment contract:
 | `GET` | `/analytics/hours` | Orders by hour of day |
 | `GET` | `/analytics/staff` | Orders started and finished per person, and how long they took |
 | `GET` | `/analytics/items` | Best selling dishes |
+| `GET` | `/analytics/insights` | A written read of the figures above, if an AI provider is configured |
 
 Every success is wrapped in `{ "data": … }`, with
 `"meta": { "pagination": … }` on list endpoints. Every failure is
@@ -296,6 +297,8 @@ Run from `frontend/`:
 | `PORT` | no | `3000` | |
 | `CORS_ORIGIN` | no | `http://localhost:5173` | The web app's origin |
 | `REDIS_URL` | no | — | Absent: no cache, one warning at boot |
+| `GROQ_API_KEY` | no | — | Turns on the written read of the dashboard. Absent: the figures still render and one panel is hidden |
+| `GROQ_MODEL` | no | `openai/gpt-oss-120b` | Any Groq chat model |
 | `AUTH_DISABLED` | no | `false` | Refuses to boot under `NODE_ENV=production` |
 
 **`frontend/.env`**

@@ -601,6 +601,36 @@ tbody tr.clickable:hover td {
   padding-left: 0;
 }
 
+/* ── AI reading ────────────────────────────────────────────────────────── */
+
+.insight {
+  border-left: 4px solid var(--preparing);
+  margin-bottom: var(--gap);
+}
+
+.insight-body p {
+  margin: 0 0 8px;
+  padding-left: 16px;
+  position: relative;
+}
+
+.insight-body p::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--preparing);
+}
+
+.insight-note {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
 /* ── Kitchen board ──────────────────────────────────────────────────────── */
 
 .board {

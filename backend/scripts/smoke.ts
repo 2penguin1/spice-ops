@@ -291,6 +291,17 @@ async function analytics() {
   expect('days out of range is INVALID_FILTER', await call('GET', '/analytics/daily?days=0'), 400, 'INVALID_FILTER')
   expect('days above the cap is INVALID_FILTER', await call('GET', '/analytics/daily?days=999'), 400, 'INVALID_FILTER')
 
+  // The AI reading must never be able to break the dashboard: no key, a
+  // provider outage or a timeout all return 200 with narrative null.
+  const ai = await call('GET', '/analytics/insights')
+  expect('insights responds 200 whether or not AI is configured', ai, 200)
+  check(
+    'insights always answers with a narrative or a stated reason',
+    typeof ai.body?.data?.narrative === 'string' || ai.body?.data?.unavailable !== null,
+    JSON.stringify(ai.body?.data),
+  )
+  check('the kitchen cannot read the AI summary', (await call('GET', '/analytics/insights', undefined, 'cook')).status === 403)
+
   const staff = await call('GET', '/analytics/staff')
   expect('staff analytics returns 200', staff, 200)
   check('staff analytics never exposes a password hash', !JSON.stringify(staff.body).includes('scrypt'))
