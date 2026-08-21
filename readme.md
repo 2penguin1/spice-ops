@@ -13,6 +13,7 @@ as `manager@spice.test` with `spice123`.
 ## Contents
 
 - [What it does](#what-it-does)
+- [What's underneath](#whats-underneath)
 - [How it fits together](#how-it-fits-together)
 - [Run it](#run-it)
 - [Sign in](#sign-in)
@@ -43,14 +44,25 @@ as `manager@spice.test` with `spice123`.
 | **Dashboard** | `/dashboard` | Revenue, order volume, service pattern, status mix, per-cook speed, top dishes. Managers and admins only. |
 | **Customers** | `/customers` | Search, add, edit, delete. |
 
-Three things run underneath the screens:
+---
 
-- **A live event stream.** Any change is pushed to every open screen, so a cook
-  marking food ready updates the waiter's list without a refresh.
-- **A status history.** Every move is recorded with who made it. All the
-  time-based numbers are read from it.
-- **Customer messages.** Queued in the same transaction as the change that
-  caused them, then sent by a worker.
+## What's underneath
+
+Each of these is one mechanism, not a setting. The third column matters as much
+as the second: nothing here is allowed to take the app down by being absent.
+
+| | How it works | With its dependency missing |
+|---|---|---|
+| **Live updates** | Server-sent events. Redis pub/sub carries a change between API copies so every screen sees it, whichever copy it is connected to | An in-process bus — live updates still work, but only for one copy |
+| **Caching** | Dashboard figures cached in Redis for 30 seconds, the written summary for 15 minutes. Invalidated by bumping a version that is part of every key, so one `INCR` retires the lot | Every query runs. Slower, identical numbers |
+| **Customer messages** | Written to an outbox table **in the same transaction** as the status change that caused them, so a crash cannot commit one and lose the other. A worker drains the table, retries three times, then records why it gave up | Nothing to miss — the outbox is in Postgres, not the queue |
+| **Message delivery** | Three interchangeable drivers: log, webhook, or real WhatsApp | Falls back to the log driver and says so once at startup |
+| **Concurrency** | Status changes are a guarded `UPDATE … WHERE status = $expected`. Zero rows affected means someone else moved first, and the caller is told which move they lost | — |
+| **Retry safety** | An optional `Idempotency-Key` on placing an order. The same key returns the same order rather than a second one | — |
+| **Audit trail** | Every status change is appended to an event log with who made it. Nothing is edited, and every time-based figure on the dashboard is read from it | — |
+| **Auth and roles** | JWT signed HS256, four roles enforced as route middleware. The event stream uses a separate 60-second ticket, because a browser cannot put a header on `EventSource` | `AUTH_DISABLED=true` for contract testing — refuses to start in production |
+| **Analytics** | Plain SQL over the same tables. Days and hours are bucketed in the restaurant's timezone, not the server's | — |
+| **AI reading of the figures** | Aggregate totals only — no customer rows, no per-person figures — sent to Groq for a short summary | The figures all render and the summary panel hides itself |
 
 ---
 
