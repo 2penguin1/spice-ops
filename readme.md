@@ -21,6 +21,7 @@ as `manager@spice.test` with `spice123`.
 - [The data model](#the-data-model)
 - [The order lifecycle](#the-order-lifecycle)
 - [Placing an order](#placing-an-order)
+- [What the dashboard measures](#what-the-dashboard-measures)
 - [API](#api)
 - [Who can do what](#who-can-do-what)
 - [Decisions worth explaining](#decisions-worth-explaining)
@@ -329,6 +330,62 @@ Everything that must be all-or-nothing sits inside the transaction. Everything
 that can be retried sits outside it.
 
 ---
+
+## What the dashboard measures
+
+Every figure here is labelled with what it literally counts, not what it
+implies. A number put in front of someone making decisions about people has to
+be defensible when they ask where it came from.
+
+### The five figures
+
+| | Counts | Worth knowing |
+|---|---|---|
+| **Taken today** | Items summed across orders in `COMPLETED` | Money actually collected, not money ordered |
+| **Still cooking** | The same sum for `PREPARING` and `READY` | Work in the building that has not been handed over |
+| **Orders today** | Orders created since midnight **in the restaurant's timezone** | The all-time count sits underneath it for scale |
+| **Average prep** | Mean of `READY − PREPARING`, read from the event log | Orders still cooking have no `READY` event and are **excluded, not counted as zero** — otherwise a busy kitchen looks fast |
+| **Cancelled** | Cancelled ÷ all orders, all time | Not windowed, so one bad day does not quietly age out of it |
+
+### The four charts
+
+| | Shows | Worth knowing |
+|---|---|---|
+| **Orders per day** | Volume over 14 days, excluding cancelled | A closed day charts as zero rather than a gap: the calendar comes from `generate_series`, so the line is never drawn straight through a missing day |
+| **Revenue per day** | Money over the same 14 days | Two charts rather than two y-axes on one — a dual axis lets the lines cross wherever the scales happen to put them, which means nothing |
+| **When orders arrive** | Every order ever placed, by hour | Bucketed in the restaurant's timezone. On a server running UTC the dinner rush charts in the afternoon |
+| **Where orders stand** | Every order, by status | Drawn in lifecycle order, and every bar is named on the axis: five saturated colours cannot all be told apart under colour blindness, so the label carries the meaning and the colour only reinforces it |
+
+### The two tables
+
+**Who cooked what** counts the orders each person started, how many they
+finished, and their average prep time. It is read from the event log, so it is
+whoever actually pressed the button rather than whoever was rostered.
+
+It reports **what each person did, not how hard they worked**. There is no
+shift schedule to divide by, so it is deliberately not a utilisation figure —
+see [the number I deleted](#decisions-worth-explaining).
+
+**Most ordered** ranks dishes by quantity with revenue beside it, excluding
+cancelled orders.
+
+### The written summary
+
+The panel at the top is written by a language model, marked `AI` so nobody
+mistakes it for a measurement.
+
+- **It receives aggregate totals only.** Revenue, counts, the status mix, the
+  busiest hours. No customer rows, no per-person figures, nothing identifying
+  anybody.
+- **It cannot reach the database.** It gets the same numbers already on the
+  screen and writes three observations about them.
+- **It is cached for 15 minutes**, because the figures do not move fast enough
+  to justify a model call per page load.
+- **Without a key it disappears.** Every real figure still renders and the
+  panel hides itself. It is commentary on the numbers, never a source of them.
+
+---
+
 
 ## API
 
