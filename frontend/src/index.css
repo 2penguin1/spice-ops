@@ -834,7 +834,10 @@ td .actions {
 
 .kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+  /* Five figures, and a 1280px laptop leaves about 985px for them. Demanding
+     196 each dropped the fifth onto its own row on the most common screen
+     there is. */
+  grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
   gap: 12px;
   margin-bottom: var(--gap);
 }
@@ -884,7 +887,7 @@ td .actions {
 .kpi-value {
   margin: 0;
   font-family: var(--mono);
-  font-size: 25px;
+  font-size: 23px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.035em;
