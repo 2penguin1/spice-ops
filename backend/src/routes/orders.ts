@@ -1,11 +1,12 @@
-import { and, count, desc, eq, ilike, inArray, or, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { z } from 'zod'
 
 import { db } from '../db/client.ts'
 import { customers, orderItems, orders } from '../db/schema.ts'
-import { ApiError } from '../lib/errors.ts'
-import { toOrderDetail, type OrderDetail } from '../lib/serialize.ts'
+import { ApiError, fromPostgresError } from '../lib/errors.ts'
+import { attachItems, loadOrderDetail } from '../lib/orders.query.ts'
+import { assertTransition, isNoop } from '../lib/status.ts'
 import {
   orderStatusSchema,
   paginationMeta,
@@ -26,29 +27,37 @@ const listQuery = paginationQuery.extend({
   customerId: z.string().trim().min(1).optional(),
 })
 
+const itemBody = z.object({
+  itemName: z.string().trim().min(1),
+  quantity: z.number().int().positive(),
+  unitPrice: z
+    .number()
+    .nonnegative()
+    .refine((value) => Number(value.toFixed(2)) === value, 'unitPrice supports at most 2 decimal places'),
+})
+
+const createOrderBody = z.object({
+  customer: z
+    .object({
+      id: z.uuid().nullable().optional(),
+      name: z.string().trim().min(1).optional(),
+      email: z.email().nullable().optional(),
+      phone: z.string().trim().min(1).optional(),
+    })
+    .refine(
+      (value) => Boolean(value.id) || Boolean(value.name && value.phone),
+      'customer.name and customer.phone are required when customer.id is not given',
+    ),
+  items: z.array(itemBody).min(1, 'Order must contain at least one item'),
+})
+
+const statusBody = z.object({ status: orderStatusSchema })
+
+const itemIdParam = z.object({ id: z.uuid(), itemId: z.uuid() })
+
 const contains = (term: string) => `%${term.replace(/[\\%_]/g, '\\$&')}%`
 
-// ─── Loading ─────────────────────────────────────────────────────────────────
-
-type OrderWithCustomer = { orders: typeof orders.$inferSelect; customers: typeof customers.$inferSelect }
-
-/**
- * Fetches the items for a whole page of orders in ONE query, then groups them
- * in memory. Twenty orders cost two queries, never twenty-one.
- */
-async function attachItems(rows: OrderWithCustomer[]): Promise<OrderDetail[]> {
-  if (rows.length === 0) return []
-
-  const items = await db
-    .select()
-    .from(orderItems)
-    .where(inArray(orderItems.orderId, rows.map((row) => row.orders.id)))
-    .orderBy(orderItems.createdAt)
-
-  const byOrderId = Map.groupBy(items, (item) => item.orderId)
-
-  return rows.map((row) => toOrderDetail(row.orders, row.customers, byOrderId.get(row.orders.id) ?? []))
-}
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Rejects a customerId that is malformed or unknown — both mean "no such customer". */
 async function assertCustomerExists(customerId: string) {
@@ -62,6 +71,54 @@ async function assertCustomerExists(customerId: string) {
   if (!found) throw ApiError.notFound('Customer')
 }
 
+type CustomerInput = z.infer<typeof createOrderBody>['customer']
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/**
+ * Attaches the order to an existing customer, or creates one.
+ *
+ * When an id is given the other fields are ignored rather than applied as an
+ * update — a typo at the counter must not overwrite a good record.
+ *
+ * When only details are given and the phone is already on file, we reuse that
+ * customer. Taking an order should not fail because someone came back a second
+ * time, and the contract lists no RESOURCE_ALREADY_EXISTS for order creation.
+ * See questions.md §1.4.
+ */
+async function resolveCustomer(tx: Tx, input: CustomerInput): Promise<string> {
+  if (input.id) {
+    const [existing] = await tx
+      .select({ id: customers.id })
+      .from(customers)
+      .where(eq(customers.id, input.id))
+
+    if (!existing) throw ApiError.notFound('Customer')
+    return existing.id
+  }
+
+  const phone = input.phone!
+
+  const [byPhone] = await tx.select({ id: customers.id }).from(customers).where(eq(customers.phone, phone))
+  if (byPhone) return byPhone.id
+
+  try {
+    const [created] = await tx
+      .insert(customers)
+      .values({ name: input.name!, email: input.email ?? null, phone })
+      .returning({ id: customers.id })
+
+    return created!.id
+  } catch (error) {
+    // Another request inserted the same phone between our lookup and insert.
+    // The unique index is what makes that safe; re-read and use theirs.
+    if (fromPostgresError(error)?.code !== 'RESOURCE_ALREADY_EXISTS') throw error
+
+    const [raced] = await tx.select({ id: customers.id }).from(customers).where(eq(customers.phone, phone))
+    if (!raced) throw error
+    return raced.id
+  }
+}
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 export const orderRoutes = new Hono()
@@ -72,7 +129,7 @@ export const orderRoutes = new Hono()
 
     if (customerId) await assertCustomerExists(customerId)
 
-    const filters: (SQL | undefined)[] = [
+    const where = and(
       status ? eq(orders.status, status) : undefined,
       customerId ? eq(orders.customerId, customerId) : undefined,
       search
@@ -82,8 +139,7 @@ export const orderRoutes = new Hono()
             ilike(customers.phone, contains(search)),
           )
         : undefined,
-    ]
-    const where = and(...filters)
+    )
 
     const { limit, offset } = toLimitOffset(pagination)
 
@@ -113,16 +169,110 @@ export const orderRoutes = new Hono()
 
   /** GET /orders/{order_id} — one order with its customer and items. */
   .get('/:id', validate('param', uuidParam, 'RESOURCE_NOT_FOUND'), async (c) => {
-    const { id } = c.req.valid('param')
+    return c.json({ data: await loadOrderDetail(c.req.valid('param').id) })
+  })
 
-    const rows = await db
-      .select()
-      .from(orders)
-      .innerJoin(customers, eq(customers.id, orders.customerId))
-      .where(eq(orders.id, id))
+  /** POST /orders — create, attaching to an existing customer or making one. */
+  .post('/', validate('json', createOrderBody), async (c) => {
+    const body = c.req.valid('json')
 
-    const [order] = await attachItems(rows)
-    if (!order) throw ApiError.notFound('Order')
+    // One transaction: a half-written order with no items must never exist.
+    const orderId = await db.transaction(async (tx) => {
+      const customerId = await resolveCustomer(tx, body.customer)
 
-    return c.json({ data: order })
+      const [order] = await tx.insert(orders).values({ customerId }).returning({ id: orders.id })
+
+      await tx.insert(orderItems).values(
+        body.items.map((item) => ({
+          orderId: order!.id,
+          itemName: item.itemName,
+          quantity: item.quantity,
+          // numeric is passed as a string: sending a float would reintroduce
+          // the precision loss the column type exists to avoid.
+          unitPrice: item.unitPrice.toFixed(2),
+        })),
+      )
+
+      return order!.id
+    })
+
+    return c.json({ data: await loadOrderDetail(orderId) }, 201)
+  })
+
+  /** PATCH /orders/{order_id}/status — advance the order through its lifecycle. */
+  .patch(
+    '/:id/status',
+    validate('param', uuidParam, 'RESOURCE_NOT_FOUND'),
+    validate('json', statusBody),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      const { status } = c.req.valid('json')
+
+      const [current] = await db.select({ status: orders.status }).from(orders).where(eq(orders.id, id))
+      if (!current) throw ApiError.notFound('Order')
+
+      // Setting the status it already has changes nothing and is not an error.
+      if (!isNoop(current.status, status)) {
+        assertTransition(current.status, status)
+
+        // The guard is in the WHERE clause, so this is atomic without a lock:
+        // if another request moved the order first, zero rows match and we
+        // report the conflict instead of overwriting their change.
+        const moved = await db
+          .update(orders)
+          .set({ status })
+          .where(and(eq(orders.id, id), eq(orders.status, current.status)))
+          .returning({ id: orders.id })
+
+        if (moved.length === 0) {
+          throw new ApiError(
+            'INVALID_STATUS_TRANSITION',
+            'The order status changed in another request — reload and try again',
+          )
+        }
+      }
+
+      return c.json({ data: await loadOrderDetail(id) })
+    },
+  )
+
+  /** POST /orders/{order_id}/items — returns the whole order, per the contract. */
+  .post(
+    '/:id/items',
+    validate('param', uuidParam, 'RESOURCE_NOT_FOUND'),
+    validate('json', itemBody),
+    async (c) => {
+      const { id } = c.req.valid('param')
+      const item = c.req.valid('json')
+
+      // Loaded first so an unknown order is a 404 rather than a foreign key error.
+      await loadOrderDetail(id)
+
+      await db.insert(orderItems).values({
+        orderId: id,
+        itemName: item.itemName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice.toFixed(2),
+      })
+
+      return c.json({ data: await loadOrderDetail(id) }, 201)
+    },
+  )
+
+  /** DELETE /orders/{order_id}/items/{item_id} — 200 with the order, not 204. */
+  .delete('/:id/items/:itemId', validate('param', itemIdParam, 'RESOURCE_NOT_FOUND'), async (c) => {
+    const { id, itemId } = c.req.valid('param')
+
+    await loadOrderDetail(id)
+
+    // Scoped to the order as well as the item, so an item id from another
+    // order cannot be deleted through this one.
+    const deleted = await db
+      .delete(orderItems)
+      .where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, id)))
+      .returning({ id: orderItems.id })
+
+    if (deleted.length === 0) throw ApiError.notFound('Order item')
+
+    return c.json({ data: await loadOrderDetail(id) })
   })
