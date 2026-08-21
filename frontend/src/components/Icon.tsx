@@ -12,6 +12,9 @@ const PATHS = {
   dashboard: 'M3 20h18 M6 20V10 M12 20V4 M18 20v-7',
   plus: 'M12 5v14 M5 12h14',
   arrow: 'M5 12h14 M13 6l6 6-6 6',
+  rupee: 'M6 4h12 M6 9h12 M6 20l7-7c3 0 4-2 4-4 0-2-1-4-4-4H8',
+  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18 M12 7v5l3 2',
+  ban: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18 M5.6 5.6l12.8 12.8',
 } as const
 
 export type IconName = keyof typeof PATHS

@@ -828,60 +828,134 @@ td .actions {
 .diet-veg { color: #1e7a4d; }
 .diet-nonveg { color: #8c2f24; }
 
-/* ── Dashboard ─────────────────────────────────────────────────────────── */
+/* ── Dashboard ─────────────────────────────────────────────────────────────
+   Figures first, then the charts that explain them, in labelled groups so a
+   manager can find one number without reading the whole page. */
 
-.tiles {
+.kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
   gap: 12px;
   margin-bottom: var(--gap);
 }
 
-.tile {
-  padding: 15px 17px 17px;
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 15px 16px 17px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--card);
   box-shadow: var(--shadow);
 }
 
-.tile .eyebrow {
-  margin-bottom: 0;
+.kpi-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
-.tile-value {
-  margin-top: 6px;
+/* The tile's colour lives in the icon well, never in the number — a figure
+   tinted by its own category reads as a status it does not have. */
+.kpi-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--tone) 13%, transparent);
+  color: var(--tone);
+}
+
+.kpi-glyph {
+  width: 15px;
+  height: 15px;
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.kpi-value {
+  margin: 0;
   font-family: var(--mono);
-  font-size: 26px;
+  font-size: 25px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.035em;
+}
+
+.kpi-note {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.section-label {
+  margin: 30px 0 12px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
 }
 
 .charts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(430px, 1fr));
   gap: var(--gap);
+  align-items: start;
 }
 
 .chart-panel {
-  padding: 16px 18px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--card);
-  box-shadow: var(--shadow);
+  padding: 16px 17px 17px;
 }
 
 .chart-panel h2 {
+  margin-bottom: 0;
   font-size: 14px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.012em;
   text-transform: none;
 }
 
 .chart-subtitle {
-  margin: 2px 0 12px;
+  margin: 3px 0 13px;
   color: var(--ink-soft);
   font-size: 12px;
+}
+
+/* A recessed well behind the plot, so the chart reads as an instrument set
+   into the card rather than as loose marks floating on it. */
+.chart-plot {
+  padding: 8px 6px 0 0;
+  border-radius: var(--radius-sm);
+  background: #f4f6f8;
+}
+
+.chart-panel table {
+  margin-top: -2px;
+}
+
+.chart-panel th:first-child,
+.chart-panel td:first-child {
+  padding-left: 0;
+}
+
+.chart-panel th:last-child,
+.chart-panel td:last-child {
+  padding-right: 0;
+}
+
+.panel-note {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 /* ── AI reading ────────────────────────────────────────────────────────── */
