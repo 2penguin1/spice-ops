@@ -2,6 +2,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import {
   boolean,
   check,
+  jsonb,
   index,
   integer,
   numeric,
@@ -143,3 +144,54 @@ export const orderStatusEvents = pgTable(
   ],
 )
 
+
+/**
+ * The transactional outbox: what we intend to tell a customer.
+ *
+ * The row is written in the SAME transaction as the status change, so a
+ * notification cannot be lost by a crash between committing the change and
+ * telling anyone about it. A worker drains it afterwards.
+ */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    channel: text('channel').notNull(),
+    recipient: text('recipient').notNull(),
+    body: text('body').notNull(),
+    status: text('status').notNull().default('PENDING'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    createdAt: timestamps.createdAt,
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+  },
+  (table) => [
+    // Partial: the drain only ever looks for work, so the index only covers
+    // rows that are work.
+    index('notifications_pending_idx')
+      .on(table.createdAt)
+      .where(sql`${table.status} = 'PENDING'`),
+    index('notifications_order_id_idx').on(table.orderId),
+  ],
+)
+
+/**
+ * Makes a retried request safe.
+ *
+ * In Postgres rather than Redis: the guarantee wanted is "exactly one order",
+ * and the order lives here. Writing the key in the same transaction as the
+ * order is what makes the two atomic — and the unique primary key is the lock,
+ * so a second concurrent request with the same key blocks until the first
+ * commits, then reads its stored response.
+ */
+export const idempotencyKeys = pgTable('idempotency_keys', {
+  key: text('key').primaryKey(),
+  endpoint: text('endpoint').notNull(),
+  requestHash: text('request_hash').notNull(),
+  statusCode: integer('status_code').notNull(),
+  responseBody: jsonb('response_body').notNull(),
+  createdAt: timestamps.createdAt,
+})

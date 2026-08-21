@@ -5,6 +5,7 @@ import { orders, orderStatusEvents } from '../db/schema.ts'
 import { ApiError } from './errors.ts'
 import { invalidateAnalytics } from './cache.ts'
 import { emitOrderUpdated } from './events.ts'
+import { queueNotification } from './notifications.ts'
 import { loadOrderDetail } from './orders.query.ts'
 import type { OrderDetail } from './serialize.ts'
 import { assertTransition, isNoop, type OrderStatus } from './status.ts'
@@ -67,6 +68,16 @@ export async function transitionOrder(
     }
 
     await recordEvent(tx, { orderId, from: current.status, to, staffId })
+
+    // Written with the change it describes, so a crash between committing and
+    // dispatching cannot lose the message.
+    const detail = await loadOrderDetail(orderId, tx)
+    await queueNotification(tx, {
+      orderId,
+      orderNumber: detail.orderNumber,
+      status: to,
+      phone: detail.customer.phone,
+    })
   })
 
   const order = await loadOrderDetail(orderId)

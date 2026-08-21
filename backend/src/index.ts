@@ -7,12 +7,14 @@ import { requestId, type RequestIdVariables } from 'hono/request-id'
 import { config } from './config.ts'
 import { pool } from './db/client.ts'
 import { closeCache } from './lib/cache.ts'
+import { startNotificationWorker, stopNotificationWorker } from './lib/notifications.ts'
 import { closeEventBus } from './lib/events.ts'
 import { requireAuth, type AuthVariables } from './lib/auth.ts'
 import { errorHandler, notFoundHandler } from './lib/errors.ts'
 import { authRoutes } from './routes/auth.ts'
 import { analyticsRoutes } from './routes/analytics.ts'
 import { eventRoutes } from './routes/events.ts'
+import { notificationRoutes } from './routes/notifications.ts'
 import { staffRoutes } from './routes/staff.ts'
 import { customerRoutes } from './routes/customers.ts'
 import { orderRoutes } from './routes/orders.ts'
@@ -43,14 +45,18 @@ app.use('/customers/*', requireAuth)
 app.use('/orders/*', requireAuth)
 app.use('/staff/*', requireAuth)
 app.use('/analytics/*', requireAuth)
+app.use('/notifications/*', requireAuth)
 
 app.route('/customers', customerRoutes)
 app.route('/orders', orderRoutes)
 app.route('/staff', staffRoutes)
 app.route('/analytics', analyticsRoutes)
+app.route('/notifications', notificationRoutes)
 
 app.notFound(notFoundHandler)
 app.onError(errorHandler)
+
+startNotificationWorker()
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, ({ port }) => {
   console.log(`API listening on http://localhost:${port}`)
@@ -65,6 +71,7 @@ const server = serve({ fetch: app.fetch, port: config.PORT }, ({ port }) => {
  */
 function shutdown(signal: string) {
   console.log(`${signal} received — draining connections`)
+  stopNotificationWorker()
 
   server.close(() => {
     void Promise.all([pool.end(), closeEventBus(), closeCache()]).then(() => process.exit(0))

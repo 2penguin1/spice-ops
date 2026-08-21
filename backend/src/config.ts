@@ -15,7 +15,8 @@ const EnvSchema = z.object({
 
   // Optional. Each of these degrades to a working fallback — see CLAUDE.md.
   REDIS_URL: z.string().optional(),
-  NOTIFY_DRIVER: z.enum(['console', 'twilio']).default('console'),
+  NOTIFY_DRIVER: z.enum(['console', 'webhook']).default('console'),
+  NOTIFY_WEBHOOK_URL: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
   GROQ_MODEL: z.string().default('openai/gpt-oss-120b'),
   AUTH_DISABLED: z
