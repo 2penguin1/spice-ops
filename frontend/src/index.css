@@ -16,7 +16,11 @@
   --confirmed: #2f6bb0;
   --preparing: #c2410c;
   --ready: #157f4b;
-  --completed: #6b7280;
+  /* Not a grey: at #6b7280 this sat 13.4 ΔE from the READY green, which the
+     palette validator rejects as hard to tell apart even with full colour
+     vision, and below the chroma floor so it read as "missing" rather than
+     "done". This violet passes every check. */
+  --completed: #6a4c93;
   --cancelled: #a11742;
 
   --sans: 'IBM Plex Sans', system-ui, sans-serif;
@@ -535,6 +539,66 @@ tbody tr.clickable:hover td {
 
 .dl dd {
   margin: 0;
+}
+
+/* ── Dashboard ─────────────────────────────────────────────────────────── */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+
+.tile {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.tile p {
+  margin: 0;
+}
+
+.tile-value {
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 4px 0 2px !important;
+}
+
+.charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+  /* Without this a short panel stretches to match a tall neighbour, leaving a
+     block of empty paper under the table. */
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chart-panel h2 {
+  margin-bottom: 2px;
+}
+
+.chart-subtitle {
+  margin: 0 0 14px;
+}
+
+.chart-panel table {
+  margin-bottom: 12px;
+}
+
+.chart-panel th,
+.chart-panel td {
+  padding-left: 0;
 }
 
 /* ── Kitchen board ──────────────────────────────────────────────────────── */

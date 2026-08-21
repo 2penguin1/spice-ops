@@ -50,6 +50,26 @@ export type OrderEvent = {
   createdAt: string
 }
 
+export type Summary = {
+  revenue: { net: number; incoming: number }
+  orders: { total: number; today: number }
+  funnel: { status: string; count: number }[]
+  cancellationRate: number
+  averagePrepSeconds: number | null
+}
+
+export type DailyPoint = { day: string; orders: number; revenue: number }
+export type HourPoint = { hour: number; orders: number }
+export type StaffPoint = {
+  id: string
+  name: string
+  role: string
+  started: number
+  finished: number
+  averagePrepSeconds: number | null
+}
+export type TopItem = { itemName: string; quantity: number; revenue: number }
+
 export type Pagination = { page: number; size: number; total: number; totalPages: number }
 
 export type Page<T> = { data: T[]; meta: { pagination: Pagination } }

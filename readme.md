@@ -100,11 +100,11 @@ npm run smoke
 
 This signs in as each role, walks the full order lifecycle, and exercises every
 error case the contract documents plus the role rules and the live stream —
-107 checks — then
+120 checks — then
 deletes the data it created. It should end with:
 
 ```
-107/107 checks passed
+120/120 checks passed
 Contract intact.
 ```
 
@@ -142,6 +142,7 @@ flag under `NODE_ENV=production`, and warns on every boot.
 | **Orders** | `/orders` | Search by order number, customer name or phone. Filter by status. Paginated. Filters live in the URL, so a filtered view can be shared. |
 | **Order** | `/orders/:id` | The order as a kitchen ticket. Advance its status, add and remove items, see the customer. Only legal next moves are offered. |
 | **Take an order** | `/orders/new` | Pick dishes from the menu, then either attach an existing customer or enter a new one. |
+| **Dashboard** | `/dashboard` | Revenue, order volume, service pattern, status mix, per-cook speed, top dishes. Managers and admins only. |
 | **Kitchen** | `/kitchen` | Live board: waiting, cooking, ready. One-click advance. Updates on its own when anyone changes an order. |
 | **Customers** | `/customers` | Search, add, edit and delete. Hidden from the kitchen. |
 
@@ -214,6 +215,11 @@ Beyond the assignment contract:
 | `GET/POST/PATCH/DELETE` | `/staff` | Staff management |
 | `POST` | `/events/ticket` | A 60 second ticket for the event stream |
 | `GET` | `/events?ticket=…` | Server-sent events; announces order changes |
+| `GET` | `/analytics/summary` | Revenue, order counts, status funnel, cancellation rate, average prep |
+| `GET` | `/analytics/daily?days=` | Orders and revenue per day |
+| `GET` | `/analytics/hours` | Orders by hour of day |
+| `GET` | `/analytics/staff` | Orders started and finished per person, and how long they took |
+| `GET` | `/analytics/items` | Best selling dishes |
 
 Every success is wrapped in `{ "data": … }`, with
 `"meta": { "pagination": … }` on list endpoints. Every failure is
@@ -232,6 +238,7 @@ Reading is open to any signed-in role. These are the actions:
 | Add or edit a customer | ✓ | ✓ | ✓ | — |
 | Delete a customer | ✓ | ✓ | — | — |
 | Manage staff | ✓ | ✓ (no deleting) | — | — |
+| See the dashboard | ✓ | ✓ | — | — |
 
 A refused action returns `403 FORBIDDEN`. A missing or expired token returns
 `401 UNAUTHORIZED`. Neither appears on a contract route for a caller with a

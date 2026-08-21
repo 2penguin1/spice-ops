@@ -21,4 +21,6 @@ export const canTakeOrders = (role: Role) => role !== 'KITCHEN'
 
 export const canEditCustomers = (role: Role) => role !== 'KITCHEN'
 
+export const canSeeDashboard = (role: Role) => role === 'ADMIN' || role === 'MANAGER'
+
 export const canDeleteCustomers = (role: Role) => role === 'ADMIN' || role === 'MANAGER'

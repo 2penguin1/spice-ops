@@ -255,6 +255,47 @@ async function stream() {
   )
 }
 
+async function analytics() {
+  expect(
+    'the kitchen cannot see the dashboard',
+    await call('GET', '/analytics/summary', undefined, 'cook'),
+    403,
+    'FORBIDDEN',
+  )
+
+  const summary = await call('GET', '/analytics/summary')
+  expect('a manager can see the summary', summary, 200)
+
+  const s = summary.body?.data
+  check('revenue is a number, not a numeric string', typeof s?.revenue?.net === 'number')
+  check('the funnel covers every status present', Array.isArray(s?.funnel) && s.funnel.length > 0)
+  check(
+    'the cancellation rate is a proportion, not a percentage',
+    s?.cancellationRate >= 0 && s?.cancellationRate <= 1,
+    String(s?.cancellationRate),
+  )
+  check(
+    'average prep time is either a number or null, never zero-for-missing',
+    s?.averagePrepSeconds === null || typeof s?.averagePrepSeconds === 'number',
+  )
+
+  // generate_series fills quiet days, so a chart cannot draw a straight line
+  // through a day that had no trade.
+  const daily = await call('GET', '/analytics/daily?days=7')
+  expect('daily returns 200', daily, 200)
+  check('daily returns exactly the days asked for', daily.body?.data?.length === 7, `${daily.body?.data?.length}`)
+
+  const hours = await call('GET', '/analytics/hours')
+  check('every hour of the day is present', hours.body?.data?.length === 24, `${hours.body?.data?.length}`)
+
+  expect('days out of range is INVALID_FILTER', await call('GET', '/analytics/daily?days=0'), 400, 'INVALID_FILTER')
+  expect('days above the cap is INVALID_FILTER', await call('GET', '/analytics/daily?days=999'), 400, 'INVALID_FILTER')
+
+  const staff = await call('GET', '/analytics/staff')
+  expect('staff analytics returns 200', staff, 200)
+  check('staff analytics never exposes a password hash', !JSON.stringify(staff.body).includes('scrypt'))
+}
+
 // ─── Envelope shapes ─────────────────────────────────────────────────────────
 
 async function envelopes() {
@@ -562,6 +603,7 @@ try {
   await protection()
   await roles()
   await stream()
+  await analytics()
   await envelopes()
   await customers()
   await lifecycle(await orders())

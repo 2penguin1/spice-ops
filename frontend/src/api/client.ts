@@ -1,5 +1,16 @@
 import type { Role } from '../lib/permissions'
-import type { Customer, OrderDetail, OrderEvent, OrderStatus, Page } from './types'
+import type {
+  Customer,
+  DailyPoint,
+  HourPoint,
+  OrderDetail,
+  OrderEvent,
+  OrderStatus,
+  Page,
+  StaffPoint,
+  Summary,
+  TopItem,
+} from './types'
 
 export const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
@@ -97,6 +108,14 @@ export const api = {
         '/auth/login',
         post({ email, password }),
       ),
+  },
+
+  analytics: {
+    summary: () => data<Summary>('/analytics/summary'),
+    daily: (days: number) => data<DailyPoint[]>(`/analytics/daily?days=${days}`),
+    hours: () => data<HourPoint[]>('/analytics/hours'),
+    staff: () => data<StaffPoint[]>('/analytics/staff'),
+    items: () => data<TopItem[]>('/analytics/items'),
   },
 
   events: {

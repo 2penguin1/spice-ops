@@ -1,8 +1,9 @@
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
 import { useAuth } from './lib/auth'
-import { canEditCustomers, canTakeOrders } from './lib/permissions'
+import { canEditCustomers, canSeeDashboard, canTakeOrders } from './lib/permissions'
 import { Customers } from './pages/Customers'
+import { Dashboard } from './pages/Dashboard'
 import { Kitchen } from './pages/Kitchen'
 import { Login } from './pages/Login'
 import { NewOrder } from './pages/NewOrder'
@@ -28,6 +29,11 @@ export default function App() {
           <NavLink to="/kitchen" className={({ isActive }) => (isActive ? 'active' : '')}>
             Kitchen
           </NavLink>
+          {canSeeDashboard(staff.role) && (
+            <NavLink to="/dashboard" className={({ isActive }) => (isActive ? 'active' : '')}>
+              Dashboard
+            </NavLink>
+          )}
           {canEditCustomers(staff.role) && (
             <NavLink to="/customers" className={({ isActive }) => (isActive ? 'active' : '')}>
               Customers
@@ -49,6 +55,10 @@ export default function App() {
           <Route path="/" element={<Navigate to="/orders" replace />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/kitchen" element={<Kitchen />} />
+          <Route
+            path="/dashboard"
+            element={canSeeDashboard(staff.role) ? <Dashboard /> : <Navigate to="/orders" replace />}
+          />
           <Route
             path="/orders/new"
             element={canTakeOrders(staff.role) ? <NewOrder /> : <Navigate to="/orders" replace />}
