@@ -37,6 +37,10 @@ services:
         generateValue: true
       - key: NODE_ENV
         value: production
+      # Pinned rather than inherited, so a change to the platform default
+      # cannot alter what this builds against.
+      - key: NODE_VERSION
+        value: "24"
       - key: CORS_ORIGIN
         fromService:
           type: web
@@ -51,6 +55,8 @@ services:
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
     envVars:
+      - key: NODE_VERSION
+        value: "24"
       - key: VITE_API_URL
         fromService:
           type: web
