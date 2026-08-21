@@ -74,3 +74,24 @@ ALTER TABLE "order_status_events" ADD CONSTRAINT "order_status_events_order_id_o
 CREATE INDEX "order_status_events_order_id_created_at_idx" ON "order_status_events" USING btree ("order_id","created_at");
 
 CREATE INDEX "order_status_events_to_status_created_at_idx" ON "order_status_events" USING btree ("to_status","created_at");
+
+-- ─── 0002_majestic_vulture.sql ───────────────────────────────────
+
+CREATE TYPE "public"."staff_role" AS ENUM('ADMIN', 'MANAGER', 'SERVICE', 'KITCHEN');
+
+CREATE TABLE "staff" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"name" text NOT NULL,
+	"email" text NOT NULL,
+	"password_hash" text NOT NULL,
+	"role" "staff_role" NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE "order_status_events" ADD COLUMN "staff_id" uuid;
+
+CREATE UNIQUE INDEX "staff_email_idx" ON "staff" USING btree ("email");
+
+ALTER TABLE "order_status_events" ADD CONSTRAINT "order_status_events_staff_id_staff_id_fk" FOREIGN KEY ("staff_id") REFERENCES "public"."staff"("id") ON DELETE set null ON UPDATE no action;

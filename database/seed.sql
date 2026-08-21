@@ -6,8 +6,16 @@
 
 BEGIN;
 
-TRUNCATE order_status_events, order_items, orders, customers RESTART IDENTITY CASCADE;
+TRUNCATE staff, order_status_events, order_items, orders, customers RESTART IDENTITY CASCADE;
 ALTER SEQUENCE order_number_seq RESTART WITH 1;
+
+-- Staff accounts. Every password is `spice123` for the demo; each row carries
+-- its own salt, so two people with the same password do not share a hash.
+INSERT INTO staff (name, email, password_hash, role) VALUES
+  ('Asha Menon', 'admin@spice.test', 'scrypt$9068ec9df45aa123d9902a10b2b4a406$ca7e18d5d198bda8fb7f86c2e1a79b8d36322a2ffd4b1ea1cc345e899a1dce5c923ab5f70ea406d98053645d16d85cbd67acdf2a10181db3d0e1266da91a3ddb', 'ADMIN'),
+  ('Vikram Rao', 'manager@spice.test', 'scrypt$f32c9382575b475d191e6b9c9d7996fb$91c4ef9b79bab42547389a68fa0fbf126554aad66e01bb1963dcf70e1b34384fcb74f604c4dad5f93c73b48edbc5723be7056fdffb95adb2fd7152df31b8c808', 'MANAGER'),
+  ('Sunil Kapoor', 'cook@spice.test', 'scrypt$7cd05363683a965729254c1d7ef5f0dc$1f8199cd26e7c22c98887c3df37fd438d796dd2982b3d58f7d56f1d4e986fa45f6f150e702042139a38560cd885829fc4c0ce4c5699e9d3fdc84a2e80f5a1ef1', 'KITCHEN'),
+  ('Nisha Patel', 'server@spice.test', 'scrypt$a8bfa321fc5b5c822991e3c450d938e3$eb3dafe3ff2d9343c51f0fd19118d236f903d10d9594a476bada2e0f539ae8441d856491a7bd13357ce02e44a9fdbc6cfbfbe948c4b79b7ac4f482a11a182b60', 'SERVICE');
 
 INSERT INTO customers (name, email, phone) VALUES
   ('Aarav Sharma',   'aarav.sharma@example.com',  '+91 98200 11223'),

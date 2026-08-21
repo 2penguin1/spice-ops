@@ -1,5 +1,6 @@
 import { sql, type SQL } from 'drizzle-orm'
 import {
+  boolean,
   check,
   index,
   integer,
@@ -21,6 +22,9 @@ export const orderStatus = pgEnum('order_status', [
   'COMPLETED',
   'CANCELLED',
 ])
+
+/** Who can do what. Enforced by the API, and constrained by the database. */
+export const staffRole = pgEnum('staff_role', ['ADMIN', 'MANAGER', 'SERVICE', 'KITCHEN'])
 
 /** Feeds `orderNumber`. A sequence cannot hand the same value to two concurrent inserts. */
 export const orderNumberSeq = pgSequence('order_number_seq', { startWith: 1 })
@@ -93,6 +97,22 @@ export const orderItems = pgTable(
   ],
 )
 
+/** Restaurant staff. Not customers — these are the people who use the system. */
+export const staff = pgTable(
+  'staff',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    email: text('email').notNull(),
+    // scrypt from node:crypto, salted per user. Never a plaintext password.
+    passwordHash: text('password_hash').notNull(),
+    role: staffRole('role').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    ...timestamps,
+  },
+  (table) => [uniqueIndex('staff_email_idx').on(table.email)],
+)
+
 /**
  * Every status change an order has been through.
  *
@@ -111,6 +131,10 @@ export const orderStatusEvents = pgTable(
     // Null for the event that created the order: it came from nowhere.
     fromStatus: orderStatus('from_status'),
     toStatus: orderStatus('to_status').notNull(),
+    // Null when the change was not made by a signed-in person — seeded history,
+    // or a request made while AUTH_DISABLED is set. Set null rather than
+    // deleted if the staff member is removed: the history stays true.
+    staffId: uuid('staff_id').references(() => staff.id, { onDelete: 'set null' }),
     createdAt: timestamps.createdAt,
   },
   (table) => [
@@ -118,3 +142,4 @@ export const orderStatusEvents = pgTable(
     index('order_status_events_to_status_created_at_idx').on(table.toStatus, table.createdAt),
   ],
 )
+

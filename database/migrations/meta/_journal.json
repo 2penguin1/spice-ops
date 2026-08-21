@@ -15,6 +15,13 @@
       "when": 1787323693226,
       "tag": "0001_neat_gambit",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787324033381,
+      "tag": "0002_majestic_vulture",
+      "breakpoints": true
     }
   ]
 }
