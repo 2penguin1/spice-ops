@@ -44,15 +44,18 @@ export function Landing() {
             <article className="dish" key={dish.itemName}>
               <div className="dish-frame">
                 <img src={photoUrl(dish.photo)} alt={dish.itemName} loading="lazy" />
+                <span
+                  className={`diet diet-${dish.diet}`}
+                  title={dish.diet === 'veg' ? 'Vegetarian' : 'Non-vegetarian'}
+                />
               </div>
-              <div className="dish-line">
-                <h3>{dish.itemName}</h3>
-                <span className="dish-price">{formatMoney(dish.unitPrice)}</span>
+              <div className="dish-body">
+                <div className="dish-line">
+                  <h3>{dish.itemName}</h3>
+                  <span className="dish-price">{formatMoney(dish.unitPrice)}</span>
+                </div>
+                <p className="dish-desc">{dish.description}</p>
               </div>
-              <span
-                className={`diet diet-${dish.diet}`}
-                title={dish.diet === 'veg' ? 'Vegetarian' : 'Non-vegetarian'}
-              />
             </article>
           ))}
         </div>

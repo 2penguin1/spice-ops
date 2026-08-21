@@ -104,8 +104,9 @@
 .hero-cta {
   display: inline-block;
   margin-top: 38px;
-  padding: 13px 30px;
+  padding: 14px 32px;
   border: 1px solid rgb(255 255 255 / 0.4);
+  border-radius: 100px;
   color: #fff;
   font-size: 13px;
   font-weight: 600;
@@ -153,7 +154,7 @@
 
 .menu-section {
   padding: clamp(72px, 10vw, 128px) 24px;
-  background: #f6f4f1;
+  background: #f1eee9;
 }
 
 .menu-head {
@@ -180,17 +181,35 @@
 
 .dishes {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
-  gap: clamp(28px, 3.4vw, 46px);
+  grid-template-columns: repeat(auto-fill, minmax(286px, 1fr));
+  gap: clamp(20px, 2.4vw, 30px);
   max-width: 1160px;
   margin: 0 auto;
 }
 
+/* A card off the page rather than a photograph printed on it: rounded, white,
+   and lifted just enough to cast a shadow on the warm ground behind it. */
 .dish {
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow:
+    0 1px 2px rgb(40 30 20 / 0.05),
+    0 14px 34px -18px rgb(40 30 20 / 0.4);
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.5s;
+}
+
+.dish:hover {
+  transform: translateY(-5px);
+  box-shadow:
+    0 2px 4px rgb(40 30 20 / 0.06),
+    0 26px 52px -22px rgb(40 30 20 / 0.5);
 }
 
 .dish-frame {
+  position: relative;
   overflow: hidden;
   aspect-ratio: 4 / 3;
   background: #e6e1da;
@@ -205,14 +224,20 @@
 }
 
 .dish:hover .dish-frame img {
-  transform: scale(1.05);
+  transform: scale(1.06);
+}
+
+.dish-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 17px 19px 21px;
 }
 
 .dish-line {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  margin-top: 18px;
+  gap: 11px;
 }
 
 .dish-line h3 {
@@ -220,7 +245,7 @@
   font-family: var(--sans);
   font-size: 16px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.012em;
 }
 
 /* The dotted leader between a dish and its price, as on a printed menu. */
@@ -230,7 +255,7 @@
   order: 1;
   height: 1px;
   margin-bottom: 4px;
-  background: repeating-linear-gradient(90deg, #c9c1b6 0 2px, transparent 2px 6px);
+  background: repeating-linear-gradient(90deg, #cdc5b9 0 2px, transparent 2px 6px);
 }
 
 .dish-price {
@@ -241,21 +266,30 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The square-and-dot mark from every menu printed in India. */
-.dish > .diet {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  width: 20px;
-  height: 20px;
-  border-width: 2px;
-  border-radius: 3px;
-  background: rgb(255 255 255 / 0.94);
+.dish-desc {
+  margin: 9px 0 0;
+  color: #6d6459;
+  font-size: 13.5px;
+  line-height: 1.55;
 }
 
-.dish > .diet::after {
-  width: 8px;
-  height: 8px;
+/* The square-and-dot mark from every menu printed in India, on a pill so it
+   stays legible whatever the photograph is doing underneath it. */
+.dish .diet {
+  position: absolute;
+  top: 13px;
+  left: 13px;
+  width: 22px;
+  height: 22px;
+  border-width: 2px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.95);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.18);
+}
+
+.dish .diet::after {
+  width: 9px;
+  height: 9px;
 }
 
 /* ── Footer ────────────────────────────────────────────────────────────── */
